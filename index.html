@@ -454,6 +454,17 @@
   </header>
 
   <div class="panel no-print" style="margin-bottom:14px;">
+    <p class="eyebrow">Mode</p>
+    <div class="source-toggle" role="group" aria-label="Planning mode">
+      <button type="button" class="toggle-btn active" id="modeAssignmentBtn">Assignment example</button>
+      <button type="button" class="toggle-btn" id="modeFieldBtn">Field planning</button>
+    </div>
+    <p id="assignmentNote" class="fetch-status" style="margin-top:8px;">
+      Fixed, offline demonstration: exactly 2 hot / 1 rainy / 4 normal days, dated to this week's Sunday. Live forecast is disabled here on purpose — the brief it comes from is never meant to be silently replaced by real weather. Switch to Field planning for a real dated week with live data.
+    </p>
+  </div>
+
+  <div class="panel no-print" style="margin-bottom:14px;">
     <p class="eyebrow"><span class="step-num">1</span> Location</p>
     <h2>Where's the plot?</h2>
     <div id="map"></div>
@@ -727,7 +738,9 @@
   }
 
   var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  // The original assignment's forecast, Sunday-first: exactly 2 hot, 1 rainy, 4 normal days.
   var DEFAULT_WEATHER = ["hot","normal","normal","rainy","normal","hot","normal"];
+  var DEFAULT_RAINFALL = [0,0,0,12,0,0,0];
   var DEFAULT_REF = [40,40,40,40,40,40,0];
   var DEFAULT_LAT = 33.05, DEFAULT_LON = 35.60;
   var INFILTRATION = 0.8; // fraction of rainfall assumed to reach the root zone
@@ -846,52 +859,79 @@
   // True only when weekday slot i is both today's weekday AND actually labeled with today's date —
   // a Sunday slot showing some other week's Sunday is not "today", even though the index matches.
   function isTodaySlot(i){
-    return i === TODAY_IDX && (!state.dates || !state.dates[i] || state.dates[i] === todayISO());
+    return i === TODAY_IDX && (!state.weekDates || !state.weekDates[i] || state.weekDates[i] === todayISO());
   }
 
   var weekStart = null; // null = "today"; set by the calendar. Never persisted — resets to today each visit.
+  // Bumped at the start of every fetchForecast() call; a response only gets applied if this is still
+  // the most recent request when it lands. Without this, a slow response for an old location/date
+  // could land after a newer request and silently overwrite it with stale data.
+  var forecastRequestSeq = 0;
   var calendarMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   // ---------- Ground sensor (today only — never persisted, since "today" changes every visit) ----------
   var FIELD_CAPACITY_REF = 0.30; // m3/m3 — rough "comfortably moist" reference for the moisture-credit formula
-  var modelHint = { moisture: null }; // Open-Meteo's modeled soil moisture for today, shown as a hint (ET0 lives in state.et0)
+  var modelHint = { moisture: null }; // Open-Meteo's modeled soil moisture for today, shown as a hint (ET0 lives on each day's own record, via getDay/dayAt)
   var sensor = { enabled: false, moistureVal: null, etVal: null };
 
+  // v3 storage keys every day's forecast by its real ISO date, not by weekday-of-week position.
+  // v2 kept one flat 7-slot array per field (state.weather[0..6]), which meant two different weeks
+  // that both have a "Sunday" collided in the same slot — pull the week of Nov 8, then the week of
+  // Nov 15, and Nov 8's data was silently overwritten even though nothing about it had changed.
+  // Bumping the key rather than writing a migration is deliberate: the old shape has no reliable way
+  // to tell which cached slot belongs to which real week, and silently reusing that data under a new
+  // date would be exactly the kind of stale-masquerading-as-current state this format exists to rule
+  // out. A clean start is the safe choice here, not a shortcut.
+  var STORAGE_KEY = "avocado-irrigation-v3";
   function loadState(){
     try{
-      var raw = localStorage.getItem("avocado-irrigation-v2");
+      var raw = localStorage.getItem(STORAGE_KEY);
       if(raw) return JSON.parse(raw);
     }catch(e){}
     return null;
   }
   function saveState(state){
-    try{ localStorage.setItem("avocado-irrigation-v2", JSON.stringify(state)); }catch(e){}
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
   }
 
   var saved = loadState();
-  var isFirstVisit = !saved;
   var state = {
-    weather: (saved && saved.weather) || DEFAULT_WEATHER.slice(),
-    rainfall: (saved && saved.rainfall) || [0,0,0,12,0,0,0],
+    // "assignment": the fixed, offline, 2-hot/1-rainy/4-normal demonstration from the original brief.
+    // "field": a real dated week — map/calendar/live-forecast-driven, field inputs, optional network.
+    mode: (saved && saved.mode) || "assignment",
+    // Canonical per-date forecast store: ISO date -> { weather, rainfall, et0, source, provider,
+    // fetchedAt }. Never indexed by weekday position, so two different real weeks never collide.
+    days: (saved && saved.days && typeof saved.days === "object") ? saved.days : {},
+    // The 7 ISO dates currently on screen, index 0=Sun..6=Sat — a VIEW/selection into `days` above,
+    // not a second copy of the data itself.
+    weekDates: (saved && saved.weekDates) || null,
     ref: (saved && saved.ref) || DEFAULT_REF.slice(),
-    dates: (saved && saved.dates) || null,
-    source: (saved && saved.source) || "manual",
+    source: (saved && saved.source) || "manual", // field-mode forecast source: "manual" | "live"
     lat: (saved && typeof saved.lat === "number") ? saved.lat : DEFAULT_LAT,
     lon: (saved && typeof saved.lon === "number") ? saved.lon : DEFAULT_LON,
-    hourlyByDate: (saved && saved.hourlyByDate) || {},
-    // Real FAO-56 reference evapotranspiration (ET0, mm/day) per weekday slot, from Open-Meteo —
-    // already folds in temperature, solar radiation/cloud cover, humidity and wind. null where no
-    // live pull has happened for that slot, in which case rawNeedForDay() falls back to the
-    // hand-set baseline and hot/normal guess.
-    et0: (saved && saved.et0) || [null,null,null,null,null,null,null]
+    hourlyByDate: (saved && saved.hourlyByDate) || {}
   };
 
-  // weekStart never persists (it's reset to null = "today" above), so a persisted state.dates from a
-  // different week — picked via the calendar in an earlier session, or just a day that's since passed —
-  // would otherwise silently outlive its session and show as "today" when it no longer is. Discard it.
-  if(state.dates && state.dates.indexOf(todayISO()) === -1){
-    state.dates = null;
-    state.hourlyByDate = {};
+  // A persisted weekDates selection from a past session can point at a week that no longer includes
+  // today — discard the SELECTION (which week is on screen), never the underlying `days` records,
+  // which remain valid history for whatever real dates they're keyed to.
+  if(state.weekDates && state.weekDates.indexOf(todayISO()) === -1){
+    state.weekDates = null;
+  }
+
+  // Returns the mutable record for a real ISO date, creating a blank one on first touch. This is the
+  // only place a day's forecast fields are read or written — callers never index by weekday.
+  function getDay(iso){
+    if(!state.days[iso]){
+      state.days[iso] = { weather: "normal", rainfall: 0, et0: null, source: "manual", provider: null, fetchedAt: null };
+    }
+    return state.days[iso];
+  }
+  // Weekday-position convenience for the render/UI code, which still thinks in terms of "today's
+  // Sunday slot" etc. — resolves through weekDates to the real date, then to that date's record.
+  function dayAt(i){
+    var iso = state.weekDates && state.weekDates[i];
+    return iso ? getDay(iso) : { weather: "normal", rainfall: 0, et0: null, source: "manual", provider: null, fetchedAt: null };
   }
 
   function formatDate(iso){
@@ -902,14 +942,64 @@
   }
 
   function getDisplayOrder(){
-    if(state.dates && state.dates.every(function(d){ return d; })){
-      var earliest = state.dates.reduce(function(min, d){ return d < min ? d : min; });
+    if(state.weekDates && state.weekDates.every(function(d){ return d; })){
+      var earliest = state.weekDates.reduce(function(min, d){ return d < min ? d : min; });
       var startWeekday = new Date(earliest + "T00:00:00").getDay();
       var order = [];
       for(var k = 0; k < 7; k++) order.push((startWeekday + k) % 7);
       return order;
     }
     return [0,1,2,3,4,5,6];
+  }
+
+  // Builds the deterministic, offline-capable assignment week — exactly 2 hot/1 rainy/4 normal days,
+  // Sunday-first — dated against this week's actual Sunday rather than a fixed, eventually-stale
+  // date. Overwrites only those 7 specific dates' records, never anything else in state.days, so a
+  // field-mode history for other real dates is never touched by this.
+  function applyAssignmentExample(){
+    var todayDow = new Date().getDay();
+    var sunday = addDaysISO(todayISO(), -todayDow);
+    var dates = [];
+    for(var k = 0; k < 7; k++) dates.push(addDaysISO(sunday, k));
+    dates.forEach(function(iso, i){
+      var rec = getDay(iso);
+      rec.weather = DEFAULT_WEATHER[i];
+      rec.rainfall = DEFAULT_RAINFALL[i];
+      rec.et0 = null; // assignment mode is explicitly offline/deterministic — never ET0-driven
+      rec.source = "assignment";
+      rec.provider = null;
+      rec.fetchedAt = null;
+      delete state.hourlyByDate[iso]; // don't let a stale real hourly-rain cache leak into a fictional day
+    });
+    state.weekDates = dates;
+    weekStart = sunday;
+  }
+
+  // Switches between the two explicit modes the brief calls for. Assignment mode is always rebuilt
+  // deterministically on entry (it has no "in-progress" state to preserve by design); field mode just
+  // flips the flag and re-enables live fetch/map/calendar, leaving whatever week is already on screen
+  // in place rather than forcing it back to "today". NOTE: the two modes' day data currently share
+  // the same `state.days`/`state.weekDates` store — a field-mode week that happens to reuse one of
+  // the assignment's 7 dates will be overwritten if the assignment is reapplied, and vice versa. Full
+  // isolation (separate stores per mode) is a known follow-up, not yet built.
+  function setMode(mode){
+    state.mode = mode;
+    $("modeAssignmentBtn").classList.toggle("active", mode === "assignment");
+    $("modeFieldBtn").classList.toggle("active", mode === "field");
+    $("assignmentNote").hidden = mode !== "assignment";
+    $("srcLiveBtn").disabled = mode === "assignment";
+    if(mode === "assignment"){
+      applyAssignmentExample();
+      setSource("manual");
+    } else if(!state.weekDates){
+      // Entering field mode with no week selected yet (e.g. straight from a fresh assignment-only
+      // session) needs something on screen before the user touches the calendar or map.
+      setManualDatesFromStart(todayISO());
+    }
+    buildDayCards();
+    buildCalendar();
+    render();
+    saveState(state);
   }
 
   function setSource(src){
@@ -928,7 +1018,7 @@
       var wd = new Date(d + "T00:00:00").getDay();
       dates[wd] = d;
     }
-    state.dates = dates;
+    state.weekDates = dates;
     saveState(state);
   }
 
@@ -1151,9 +1241,14 @@
     status.className = "fetch-status";
     status.textContent = "Fetching the forecast…";
 
+    // Capture this request's own identity (location, dates, sequence number) so that if a newer
+    // request starts before this one resolves, this one's response gets discarded on arrival rather
+    // than overwriting whatever the newer request already wrote.
+    var mySeq = ++forecastRequestSeq;
+    var requestLat = state.lat, requestLon = state.lon;
     var startDate = weekStart || todayISO();
     var endDate = addDaysISO(startDate, 6);
-    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + state.lat + "&longitude=" + state.lon +
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + requestLat + "&longitude=" + requestLon +
       "&daily=temperature_2m_max,precipitation_sum,et0_fao_evapotranspiration&hourly=precipitation,soil_moisture_0_to_10cm" +
       "&timezone=auto&start_date=" + startDate + "&end_date=" + endDate;
 
@@ -1163,26 +1258,36 @@
         return res.json();
       })
       .then(function(data){
+        // A newer fetchForecast() call started while this one was in flight — its response already
+        // landed (or is still pending) and takes precedence. Applying this one now would silently
+        // overwrite newer, more relevant data with this stale response.
+        if(mySeq !== forecastRequestSeq){
+          return;
+        }
         var d = data.daily;
         if(!d || !d.time) throw new Error("Unexpected response shape");
 
-        var newDates = state.dates || [null,null,null,null,null,null,null];
+        var newWeekDates = state.weekDates || [null,null,null,null,null,null,null];
         d.time.forEach(function(iso, idx){
           var weekday = new Date(iso + "T00:00:00").getDay(); // 0=Sun..6=Sat, matches DAYS order
           var tempMax = d.temperature_2m_max[idx];
           var precip = d.precipitation_sum[idx] || 0;
-          state.weather[weekday] = classifyDay(tempMax, precip, hotThreshold, rainThreshold);
+          var rec = getDay(iso); // keyed by the real calendar date — never collides with another week
+          rec.weather = classifyDay(tempMax, precip, hotThreshold, rainThreshold);
           // Store the real forecast rainfall regardless of the hot/normal/rainy label — that label is
           // just a display threshold; the irrigation math should credit every bit of real rain, even a
           // sub-threshold drizzle on a day otherwise classified "normal".
-          state.rainfall[weekday] = Math.round(precip * 10) / 10;
+          rec.rainfall = Math.round(precip * 10) / 10;
           // Real reference evapotranspiration for this day — see rawNeedForDay() for how it
           // replaces the cruder hot/normal heuristic whenever it's available.
           var et0Val = d.et0_fao_evapotranspiration && d.et0_fao_evapotranspiration[idx];
-          state.et0[weekday] = typeof et0Val === "number" ? et0Val : null;
-          newDates[weekday] = iso;
+          rec.et0 = typeof et0Val === "number" ? et0Val : null;
+          rec.source = "live";
+          rec.provider = "open-meteo";
+          rec.fetchedAt = new Date().toISOString();
+          newWeekDates[weekday] = iso;
         });
-        state.dates = newDates;
+        state.weekDates = newWeekDates;
 
         var h = data.hourly;
         if(h && h.time && h.precipitation){
@@ -1197,8 +1302,8 @@
         }
 
         // Model-estimated soil moisture for today specifically, shown as a hint on the ground-sensor
-        // card — not used in the math unless the sensor toggle is on and empty. (ET0 is already in
-        // state.et0 from the loop above, and used directly in the math, not just as a hint.)
+        // card — not used in the math unless the sensor toggle is on and empty. (ET0 was already
+        // written onto each day's own record in the loop above, and used directly in the math.)
         var todayStr = todayISO();
         if(h && h.time && h.soil_moisture_0_to_10cm){
           var todayHourIdx = h.time.indexOf(todayStr + "T12:00");
@@ -1211,6 +1316,7 @@
           ". Edit any day below if it needs a human override.";
       })
       .catch(function(err){
+        if(mySeq !== forecastRequestSeq) return; // a newer request's own status already applies
         status.className = "fetch-status error";
         var reason = err.name === "AbortError" ? "it took too long to respond" : err.message;
         status.textContent = "Couldn't reach the forecast service (" + reason + "). Enter the week by hand instead.";
@@ -1274,6 +1380,7 @@
     getDisplayOrder().forEach(function(i){
       var name = DAYS[i];
       var isActuallyToday = isTodaySlot(i);
+      var rec = dayAt(i);
       var card = document.createElement("div");
       card.className = "day-card";
       card.id = "day-"+i;
@@ -1282,8 +1389,11 @@
 
       var nameDiv = document.createElement("div");
       nameDiv.className = "day-name";
-      var sub = state.dates && state.dates[i] ? formatDate(state.dates[i]) : name;
+      var sub = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : name;
       if(isActuallyToday) sub += " · today";
+      // Provenance is visible, not just internally tracked — the brief's own complaint was a label
+      // that could be edited without any sign of whether that changed a real number.
+      sub += rec.source === "live" ? " · live" : "";
       nameDiv.innerHTML = name.slice(0,3) + "<small>"+sub+"</small>";
       card.appendChild(nameDiv);
 
@@ -1292,10 +1402,23 @@
         '<option value="hot">Hot</option>' +
         '<option value="normal">Normal</option>' +
         '<option value="rainy">Rainy</option>';
-      sel.value = state.weather[i];
+      sel.value = rec.weather;
       sel.addEventListener("change", function(){
-        state.weather[i] = sel.value;
+        var r = dayAt(i);
+        r.weather = sel.value;
+        // Changing the label alone must never leave a stale live ET0 quietly driving the number
+        // under a different name — that's an explicit override now: it clears the live reading and
+        // switches this one day to the manual baseline/category estimate, visibly (see the "· live"
+        // suffix above, which disappears once this fires).
+        if(r.source === "live"){
+          r.source = "manual";
+          r.et0 = null;
+          r.provider = null;
+          r.fetchedAt = null;
+          buildDayCards(); // rebuild so the "· live" tag and this card's own state reflect the switch
+        }
         render();
+        saveState(state);
       });
       card.appendChild(sel);
 
@@ -1305,17 +1428,18 @@
       rainInput.min = "0";
       rainInput.step = "1";
       rainInput.placeholder = "rain mm";
-      rainInput.value = state.rainfall[i] || "";
-      rainInput.style.display = state.weather[i] === "rainy" ? "block" : "none";
+      rainInput.value = rec.rainfall || "";
+      rainInput.style.display = rec.weather === "rainy" ? "block" : "none";
       rainInput.addEventListener("input", function(){
-        state.rainfall[i] = Number(rainInput.value) || 0;
+        dayAt(i).rainfall = Number(rainInput.value) || 0;
         render();
+        saveState(state);
       });
-      if(state.weather[i] !== "rainy" && state.rainfall[i] > 0){
+      if(rec.weather !== "rainy" && rec.rainfall > 0){
         var hint = document.createElement("small");
         hint.style.color = "var(--water)";
         hint.style.fontSize = "0.68rem";
-        hint.textContent = "+" + state.rainfall[i] + "mm forecast, credited anyway";
+        hint.textContent = "+" + rec.rainfall + "mm forecast, credited anyway";
         rainWrap.appendChild(hint);
       }
       sel.addEventListener("change", function(){
@@ -1378,7 +1502,7 @@
 
     var hintParts = [];
     if(modelHint.moisture != null) hintParts.push("modeled moisture ~" + modelHint.moisture.toFixed(2) + " m³/m³");
-    if(typeof state.et0[TODAY_IDX] === "number") hintParts.push("modeled ET0 ~" + state.et0[TODAY_IDX].toFixed(1) + "mm");
+    if(typeof dayAt(TODAY_IDX).et0 === "number") hintParts.push("modeled ET0 ~" + dayAt(TODAY_IDX).et0.toFixed(1) + "mm");
     var hint = document.createElement("small");
     hint.className = "sensor-hint";
     hint.textContent = hintParts.length ?
@@ -1445,12 +1569,13 @@
     var hotIdx = -1, normalIdx = -1, rainyIdx = -1;
     DAYS.forEach(function(d, i){
       if(i === restDay) return;
-      if(state.weather[i] === "hot" && hotIdx === -1) hotIdx = i;
-      if(state.weather[i] === "normal" && normalIdx === -1) normalIdx = i;
-      if(state.weather[i] === "rainy" && rainyIdx === -1) rainyIdx = i;
+      var w = dayAt(i).weather;
+      if(w === "hot" && hotIdx === -1) hotIdx = i;
+      if(w === "normal" && normalIdx === -1) normalIdx = i;
+      if(w === "rainy" && rainyIdx === -1) rainyIdx = i;
     });
-    var hotDays = DAYS.filter(function(d,i){ return i!==restDay && state.weather[i]==="hot"; });
-    var rainyDays = DAYS.filter(function(d,i){ return i!==restDay && state.weather[i]==="rainy"; });
+    var hotDays = DAYS.filter(function(d,i){ return i!==restDay && dayAt(i).weather==="hot"; });
+    var rainyDays = DAYS.filter(function(d,i){ return i!==restDay && dayAt(i).weather==="rainy"; });
     var irrigationDays = restDay >= 0 ? 6 : 7;
 
     var parts = [];
@@ -1555,19 +1680,20 @@
     // every day regardless of rest-day status, so the rest day's own unmet need is knowable —
     // see the redistribution pass right after.
     function rawNeedForDay(i){
-      var w = state.weather[i];
+      var rec = dayAt(i);
+      var w = rec.weather;
       var etNeed;
       if(isTodaySlot(i) && sensor.enabled && sensor.etVal != null){
         // A real field measurement for today — already reflects actual soil and weather as observed,
         // so it replaces everything else outright rather than being scaled further.
         etNeed = sensor.etVal * effAreaPerTree;
-      } else if(typeof state.et0[i] === "number"){
+      } else if(typeof rec.et0 === "number"){
         // Real FAO-56 reference evapotranspiration for this day: Open-Meteo derives it from actual
         // temperature, solar radiation (so a cloudy day pulls this down on its own), humidity and
         // wind — far more accurate than guessing from a hot/normal label. The crop coefficient (kc)
         // converts that atmospheric figure into this variety's actual water use; soilFactor still
         // approximates how much of it the soil holds onto.
-        etNeed = state.et0[i] * variety.kc * soilFactor * effAreaPerTree;
+        etNeed = rec.et0 * variety.kc * soilFactor * effAreaPerTree;
       } else {
         // No live data for this day (manual entry, or never pulled) — fall back to the hand-set
         // baseline and the coarser hot/normal guess.
@@ -1575,7 +1701,7 @@
       }
       // Any recorded rainfall counts, not just days labeled "Rainy" — a sub-threshold
       // drizzle on a "Normal" day still reduces how much needs to be irrigated.
-      var rainMm = state.rainfall[i] || 0;
+      var rainMm = rec.rainfall || 0;
       var effectiveRainL = rainMm * effAreaPerTree * INFILTRATION;
       var need = Math.max(0, etNeed - effectiveRainL);
       // A real soil-moisture reading for today further credits whatever water is already in the ground —
@@ -1639,7 +1765,7 @@
 
     var windows = DAYS.map(function(_, i){
       if(i === restDay || litersPerTree[i] <= 0) return null;
-      var hourlyArr = state.dates && state.dates[i] && state.hourlyByDate ? state.hourlyByDate[state.dates[i]] : null;
+      var hourlyArr = state.weekDates && state.weekDates[i] && state.hourlyByDate ? state.hourlyByDate[state.weekDates[i]] : null;
       return pickIrrigationWindow(hourlyArr);
     });
     var hoursNeeded = DAYS.map(function(_, i){
@@ -1649,8 +1775,8 @@
     $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
 
     var soilLabel = $("soil").options[$("soil").selectedIndex].text;
-    var weekDates = state.dates ? state.dates.filter(function(d){ return d; }).sort() : [];
-    var weekRange = weekDates.length ? formatDate(weekDates[0]) + " – " + formatDate(weekDates[weekDates.length-1]) : "this week";
+    var printWeekDates = state.weekDates ? state.weekDates.filter(function(d){ return d; }).sort() : [];
+    var weekRange = printWeekDates.length ? formatDate(printWeekDates[0]) + " – " + formatDate(printWeekDates[printWeekDates.length-1]) : "this week";
     $("printSummary").innerHTML =
       "<p style=\"margin:0 0 6px;font-size:0.8rem;color:#555;\">Plan for " + weekRange + " — printed " + new Date().toLocaleDateString() + "</p>" +
       '<div class="print-summary-grid">' +
@@ -1672,14 +1798,14 @@
       var capped = cappedDays.indexOf(name) !== -1;
       var div = document.createElement("div");
       div.className = "plan-card" + (isRest ? " rest" : "") + (capped ? " capped" : "");
-      var dateSub = state.dates && state.dates[i] ? '<span class="pc-date">' + formatDate(state.dates[i]) + '</span>' : "";
+      var dateSub = state.weekDates && state.weekDates[i] ? '<span class="pc-date">' + formatDate(state.weekDates[i]) + '</span>' : "";
       var whenHtml = (!isRest && litersPerTree[i] > 0) ?
         '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
       var compBadge = compensation && (i === compensation.beforeIdx || i === compensation.afterIdx) ?
         '<div class="pc-comp">+' + DAYS[restDay].slice(0,3) + " top-up</div>" : "";
       div.innerHTML =
         '<div class="pc-day">' + name.slice(0,3) + dateSub + '</div>' +
-        (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(state.weather[i])) +
+        (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(dayAt(i).weather)) +
         '<div class="pc-liters">' + litersPerTree[i] + '<span class="pc-unit">L / tree</span></div>' +
         '<div class="pc-total">' + plotTotal[i].toLocaleString() + ' L total</div>' +
         compBadge + whenHtml;
@@ -1722,7 +1848,7 @@
       var delta = litersPerTree[i] - (state.ref[i] || 0);
       var deltaStr = (delta >= 0 ? "+" : "") + Math.round(delta) + " L";
       var barPct = maxLiters > 0 ? Math.round((litersPerTree[i]/maxLiters)*100) : 0;
-      var dateLabel = state.dates && state.dates[i] ? " (" + formatDate(state.dates[i]) + ")" : "";
+      var dateLabel = state.weekDates && state.weekDates[i] ? " (" + formatDate(state.weekDates[i]) + ")" : "";
       var whenCell = isRest ? "No irrigation" : litersPerTree[i] <= 0 ? "Skip — no watering needed" :
         formatWindowLong(windows[i], hoursNeeded[i]) +
         (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(default slot)</span>");
@@ -1730,13 +1856,13 @@
       var tr = document.createElement("tr");
       tr.innerHTML =
         "<td>" + name + dateLabel + "</td>" +
-        "<td>" + (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(state.weather[i])) + "</td>" +
+        "<td>" + (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(dayAt(i).weather)) + "</td>" +
         '<td class="num">' + litersPerTree[i] +
           '<div class="bar-track"><div class="bar-fill" style="width:' + barPct + '%"></div></div></td>' +
         "<td>" + whenCell + "</td>" +
         '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
         '<td class="num">' + deltaStr + "</td>" +
-        "<td>" + noteFor(state.weather[i], isRest, capped, litersPerTree[i], state.rainfall[i]||0) +
+        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0) +
           (isTodaySlot(i) && sensor.enabled ? " <em>Adjusted using your sensor reading for today.</em>" : "") +
           (compensation && isRest ? " <em>That water isn't lost — split between " + DAYS[compensation.beforeIdx] +
             " and " + DAYS[compensation.afterIdx] + ".</em>" : "") +
@@ -1813,13 +1939,7 @@
   }
 
   function resetToExample(){
-    state.weather = DEFAULT_WEATHER.slice();
-    state.rainfall = [0,0,0,12,0,0,0];
     state.ref = DEFAULT_REF.slice();
-    state.dates = null;
-    state.hourlyByDate = {};
-    state.et0 = [null,null,null,null,null,null,null];
-    weekStart = null;
     calendarMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     sensor.enabled = false;
     sensor.moistureVal = null;
@@ -1834,13 +1954,10 @@
     $("flowRate").value = 1500;
     $("maxHours").value = 4;
     $("restday").value = "6";
-    setSource("manual");
     setLocation(DEFAULT_LAT, DEFAULT_LON, true);
     if(map) map.setView([DEFAULT_LAT, DEFAULT_LON], 9);
-    buildDayCards();
+    setMode("assignment"); // rebuilds the dated 2-hot/1-rainy/4-normal week, sets source=manual, re-renders
     buildRefCards();
-    buildCalendar();
-    render();
   }
 
   ["area","density","variety","baseline","soil","budget","flowRate","maxHours","restday"].forEach(function(id){
@@ -1872,22 +1989,19 @@
     calendarMonthCursor = new Date(calendarMonthCursor.getFullYear(), calendarMonthCursor.getMonth() + 1, 1);
     buildCalendar();
   });
-
-  if(!state.dates) setManualDatesFromStart(todayISO());
+  $("modeAssignmentBtn").addEventListener("click", function(){ setMode("assignment"); });
+  $("modeFieldBtn").addEventListener("click", function(){ setMode("field"); });
 
   updateLatLonInputs();
   applyLocalSoilEstimate();
   setSource(state.source);
   initMap();
-  buildDayCards();
   buildRefCards();
-  buildCalendar();
-  render();
 
-  if(isFirstVisit){
-    setSource("live");
-    pullLocationData();
-  }
+  // Land on the deterministic assignment demo by default, in both the first-visit and returning-
+  // visit cases — live field data is opt-in via the Field planning button, never automatic, which is
+  // the same "never auto-replace the assignment with live weather" rule applied to page load too.
+  setMode(state.mode);
 })();
 </script>
 </body>
