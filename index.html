@@ -674,6 +674,23 @@
 
     <div id="warnings"></div>
 
+    <div id="demandChartSection" style="margin-top:14px;">
+      <h3 style="margin:0 0 6px;font-size:0.95rem;font-family:var(--font-display);">Demand vs. applied (gross L / tree)</h3>
+      <div id="demandChartSvgWrap" role="img" aria-label=""></div>
+      <p style="font-size:0.78rem;color:var(--muted);margin:6px 0 0;">
+        Both bars are gross figures — after system-efficiency losses, same basis as everywhere else on this page — so they're directly comparable. A day showing more applied than its own demand isn't an error: that's advance watering ahead of the rest day. The rest day's own bar shows what it would have needed, even though nothing is actually poured on it that day.
+      </p>
+      <details class="detail-toggle" style="margin-top:6px;">
+        <summary>View as table</summary>
+        <div class="tableScroll">
+          <table id="demandChartTable">
+            <thead><tr><th>Day</th><th class="num">Demand (L/tree)</th><th class="num">Applied (L/tree)</th><th class="num">Deficit (L/tree)</th></tr></thead>
+            <tbody id="demandChartTableBody"></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
     <details class="detail-toggle">
       <summary>Full table — liters per tree, timing, plot totals, and the comparison to last week</summary>
       <div class="tableScroll">
@@ -713,11 +730,22 @@
     <div id="refCards" class="ref-grid"></div>
   </details>
 
+  <details class="panel no-print" style="margin-bottom:14px;">
+    <summary>
+      <span>
+        <p class="eyebrow">Progressive disclosure</p>
+        <h2>How this plan is calculated</h2>
+      </span>
+    </summary>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;">Every figure below is read from THIS plan, right now — not a general description that can drift out of sync with what's actually on screen above.</p>
+    <div id="formulasBody" style="font-size:0.85rem;line-height:1.65;"></div>
+  </details>
+
   <footer>
     <p><strong>How the numbers are built.</strong> Each day's water need starts from ET<sub>0</sub> (reference evapotranspiration) pulled live from Open-Meteo, which Open-Meteo itself derives from real temperature (not just a daily max — the actual curve), solar radiation (so a cloudy, overcast day pulls this down on its own, with no separate "cloud cover" step needed), humidity and wind. That single figure, scaled by the chosen variety's crop coefficient (Guatemalan types like Reed run higher than Mexican-race types like Bacon or Zutano) and by how well the soil at the pin holds moisture, is this plan's actual water need for the day. Only when no live pull has happened for a given day does it fall back to the hand-set baseline L/tree figure and a coarser hot/normal guess. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
     <p><strong>Tree density vs. plot size.</strong> A single tree's own demand is set by its canopy, not by how much empty land happens to be around it, so each tree's land/water credit is capped at roughly a closed-canopy reference (40 trees/dunam — the default). Planted sparser than that, every tree still gets that full reference share and rainfall is credited the same way, so the plot's total use scales with how many trees are actually out there, not with land you aren't using. Planted denser than that, trees genuinely compete for a shrinking footprint, so each one's share — and rainfall credit — shrinks for real, and total use levels off at the land-area ceiling rather than climbing further. Assumes roughly 80% of any given rainfall reaches the root zone.</p>
     <p><strong>What this does and doesn't cover.</strong> Temperature through the day, cloud cover and sun exposure all feed into ET<sub>0</sub> as above, so yes — they matter, and they're already in the number. A genuine heatwave shows up automatically as a spike in ET<sub>0</sub>, not as a separate flag. What isn't modeled: windblown dust or sandstorms (no free weather API reports this directly) and any physical damage to the canopy — those still need a human to notice and override by hand.</p>
-    <p><strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost: whatever it would have needed is split in half onto the day before (so the soil is already moist going into the dry day) and the day after (to make up the rest), so the week's total stays the same as it would without a rest day at all — only the timing changes. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely ("None") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's flow rate &times; max hours is capped at that ceiling and flagged.</p>
+    <p><strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost — it only goes to a day actually shown in this week's view, on the correct side of the rest day: the day before gets an advance share (so the soil is already moist going into the dry day), the day after gets a make-up share, and either one is skipped if it isn't really in this week's displayed range — a rest day on Saturday, the default, has no "day after" inside a Sunday-start week, so advance watering onto Friday carries the whole job, and whatever that can't cover is disclosed as carrying into next week rather than wrongly credited to an earlier day. With the soil-water balance (below) switched on and fed by real ET&#8320;, the advance amount is sized to what the soil can actually hold and to what the rest day's own forecast still needs, not a blind half; otherwise it falls back to splitting evenly across whichever day(s) are actually in view. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely ("None") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's actual flow &times; max hours is capped at that ceiling and flagged.</p>
     <p><strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.</p>
     <p><strong>Ground sensor.</strong> Only "today's" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.</p>
     <p><strong>Choosing dates.</strong> The calendar sets which 7-day window "this week" means. Greyed-out dates have no forecast (Open-Meteo's own live range is roughly 90 days back to 15 days ahead) — you can still pick them, but you'll enter that week's weather by hand.</p>
@@ -1608,6 +1636,172 @@
       ' mm) — this reports what the schedule above already does to the soil; it does not change that schedule.</p>';
   }
 
+  // ---------- Demand vs. applied chart (brief section 9) ----------
+  // A small inline-SVG grouped bar chart, no charting library: 7 days x (demand, applied). Both
+  // series are gross (post-efficiency) L/tree, the same basis used everywhere else on this page,
+  // so they're directly comparable — never net-vs-gross. ownNeed is each day's OWN requirement,
+  // captured BEFORE the rest-day compensation pass added advance/make-up water onto raw[] (see
+  // where it's sliced in render()), so an advance-watered day's bar correctly shows applied >
+  // demand without that looking like the day's own need somehow grew. litersPerTree is the FINAL,
+  // already budget/hardware-constrained schedule. A text-table equivalent (brief: "provide a
+  // text/table equivalent") is rendered alongside, and the SVG carries an aria-label summarizing
+  // the same numbers for anyone who can't see the graphic at all.
+  function renderDemandChart(ownNeed, litersPerTree, restDay, compensation){
+    var wrap = $("demandChartSvgWrap"), tbody = $("demandChartTableBody");
+    var n = DAYS.length;
+    // The rest day's own bar shows what it WOULD have needed (so the deficit/redistribution is
+    // visible), not 0 — 0 is reserved for "actually irrigated amount," which is litersPerTree.
+    var demandForChart = DAYS.map(function(_, i){
+      return (i === restDay && compensation) ? compensation.perTree : ownNeed[i];
+    });
+    var maxVal = Math.max.apply(null, demandForChart.concat(litersPerTree).concat([1]));
+
+    var W = 700, H = 230, padLeft = 34, padBottom = 46, padTop = 16, padRight = 10;
+    var plotW = W - padLeft - padRight, plotH = H - padTop - padBottom;
+    var groupW = plotW / n;
+    var barW = Math.min(26, groupW * 0.32);
+    function y(v){ return padTop + plotH - (v / maxVal) * plotH; }
+    function barH(v){ return (v / maxVal) * plotH; }
+
+    var marks = "";
+    [0, 0.5, 1].forEach(function(f){
+      var gy = padTop + plotH * (1 - f);
+      marks += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (W - padRight) + '" y2="' + gy + '" stroke="var(--border)" stroke-width="1"/>' +
+        '<text x="' + (padLeft - 6) + '" y="' + (gy + 4) + '" font-size="10" fill="var(--muted)" text-anchor="end" font-family="var(--font-mono)">' +
+        Math.round(maxVal * f) + '</text>';
+    });
+
+    DAYS.forEach(function(_, i){
+      var cx = padLeft + i * groupW + groupW / 2;
+      var demandV = demandForChart[i], appliedV = litersPerTree[i];
+      var isRest = i === restDay;
+      var demandX = cx - barW - 2, appliedX = cx + 2;
+
+      marks += '<rect x="' + demandX + '" y="' + y(demandV) + '" width="' + barW + '" height="' + barH(demandV) +
+        '" fill="' + (isRest ? "var(--muted)" : "var(--avocado)") + '" opacity="' + (isRest ? 0.55 : 1) + '"><title>' +
+        DAYS[i] + " demand: " + Math.round(demandV) + " L/tree" + (isRest ? " (rest day — not actually irrigated)" : "") + '</title></rect>';
+      marks += '<rect x="' + appliedX + '" y="' + y(appliedV) + '" width="' + barW + '" height="' + barH(appliedV) +
+        '" fill="var(--water)"><title>' + DAYS[i] + " applied: " + Math.round(appliedV) + ' L/tree</title></rect>';
+
+      if(!isRest && appliedV < demandV - 0.5){
+        marks += '<rect x="' + appliedX + '" y="' + y(demandV) + '" width="' + barW + '" height="' + (y(appliedV) - y(demandV)) +
+          '" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3,2"><title>' + DAYS[i] + " deficit: " +
+          Math.round(demandV - appliedV) + ' L/tree</title></rect>';
+      }
+
+      var dateLabel = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : "";
+      marks += '<text x="' + cx + '" y="' + (H - padBottom + 16) + '" font-size="11" fill="var(--ink)" text-anchor="middle" font-family="var(--font-body)">' +
+        DAYS[i].slice(0, 3) + '</text>';
+      if(dateLabel){
+        marks += '<text x="' + cx + '" y="' + (H - padBottom + 30) + '" font-size="9" fill="var(--muted)" text-anchor="middle" font-family="var(--font-mono)">' +
+          dateLabel + '</text>';
+      }
+    });
+
+    var legend =
+      '<g font-size="10" font-family="var(--font-body)">' +
+        '<rect x="' + padLeft + '" y="2" width="10" height="10" fill="var(--avocado)"></rect><text x="' + (padLeft + 14) + '" y="11" fill="var(--ink)">Demand</text>' +
+        '<rect x="' + (padLeft + 80) + '" y="2" width="10" height="10" fill="var(--water)"></rect><text x="' + (padLeft + 94) + '" y="11" fill="var(--ink)">Applied</text>' +
+        '<rect x="' + (padLeft + 160) + '" y="2" width="10" height="10" fill="var(--muted)" opacity="0.55"></rect><text x="' + (padLeft + 174) + '" y="11" fill="var(--ink)">Rest day (hypothetical)</text>' +
+      '</g>';
+
+    wrap.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:700px;display:block;">' + legend + marks + '</svg>';
+    wrap.setAttribute("aria-label", "Bar chart comparing each day's gross water demand to the gross amount actually applied: " +
+      DAYS.map(function(_, i){
+        return DAYS[i] + " demand " + Math.round(demandForChart[i]) + " liters per tree, applied " + Math.round(litersPerTree[i]) + " liters per tree";
+      }).join("; "));
+
+    tbody.innerHTML = DAYS.map(function(_, i){
+      var demandV = demandForChart[i], appliedV = litersPerTree[i];
+      var dateLabel = state.weekDates && state.weekDates[i] ? " (" + formatDate(state.weekDates[i]) + ")" : "";
+      return "<tr><td>" + DAYS[i] + dateLabel + (i === restDay ? " — rest day" : "") + "</td>" +
+        '<td class="num">' + Math.round(demandV) + "</td>" +
+        '<td class="num">' + Math.round(appliedV) + "</td>" +
+        '<td class="num">' + (i === restDay ? "—" : Math.round(Math.max(0, demandV - appliedV))) + "</td></tr>";
+    }).join("");
+  }
+
+  // ---------- Formulas & assumptions panel (brief section 9) ----------
+  // Built entirely from the SAME values render() just computed and used for the actual schedule
+  // above -- never a separately-maintained description that can drift out of sync with the
+  // engine. (The brief calls out exactly that failure mode in alternative A's contradictory pump
+  // formula, where the displayed math and the real calculation disagreed.)
+  function renderFormulasPanel(ctx){
+    var body = $("formulasBody");
+    var parts = [];
+
+    parts.push("<p><strong>Mode: " + (ctx.mode === "assignment" ? "Assignment / example" : "Field planning") + ".</strong> " +
+      (ctx.mode === "assignment" ?
+        "Deterministic offline demonstration — weather categories and rainfall are fixed assumptions, never live data, and the live-fetch button is disabled. Numeric ET&#8320; is never used in this mode." :
+        "Dated week with " + (ctx.source === "live" ? "a live forecast pulled from Open-Meteo" : "manually entered weather") + ". " +
+        (ctx.source === "live" ? "Any day you've hand-edited since pulling is marked and no longer tied to that pulled ET&#8320;." :
+          "Switch to a live pull to use numeric ET&#8320; instead of the baseline/category estimate below.")) +
+      "</p>");
+
+    parts.push("<p><strong>Per-tree water need.</strong> For a day with real ET&#8320; (Open-Meteo's reference evapotranspiration): " +
+      "<code>need = ET&#8320; &times; kc &times; soilFactor &times; effAreaPerTree</code> — currently kc " + ctx.variety.kc.toFixed(2) +
+      " (" + ctx.variety.name + "), soilFactor " + ctx.soilFactor.toFixed(2) + ", effAreaPerTree " + Math.round(ctx.effAreaPerTree) +
+      " m&sup2;. For a day with no live ET&#8320; (manual/assignment): <code>need = baseline &times; heatFactor(if hot) &times; soilFactor &times; waterFactor &times; densityFactor</code> — " +
+      "currently baseline " + ctx.baseline + " L/tree, heatFactor " + ctx.variety.heatFactor.toFixed(2) + " on a hot day, waterFactor " +
+      ctx.variety.waterFactor.toFixed(2) + ", densityFactor " + ctx.densityFactor.toFixed(2) + ". Both paths then subtract rainfall credit " +
+      "(<code>rain_mm &times; effAreaPerTree &times; " + INFILTRATION + "</code> — " + Math.round(INFILTRATION * 100) +
+      "% of rainfall assumed to reach the root zone), floored at zero, then divide by system efficiency (<code>net &divide; efficiency</code>) " +
+      "for the GROSS, pump-side figure used everywhere downstream — currently &divide; " + ctx.efficiencyPct + "%.</p>");
+
+    parts.push("<p><strong>Tree count &amp; reference area.</strong> " + ctx.trees.toLocaleString() + " trees = round(" + ctx.area + " dunam &times; " +
+      ctx.density + " trees/dunam). Each tree's reference area is capped at the " + ctx.REFERENCE_DENSITY + "/dunam closed-canopy reference (" +
+      Math.round(1000 / ctx.REFERENCE_DENSITY) + " m&sup2;), so planting sparser than that doesn't inflate any one tree's own demand. Land per tree " +
+      "and actual canopy/root area are being treated as the same thing here — a simplification, not a measured root-zone reading.</p>");
+
+    parts.push("<p><strong>Hardware feasibility.</strong> All " + ctx.trees.toLocaleString() + " trees at once need <code>trees &times; emitterFlow</code> = " +
+      Math.round(ctx.zoneDemandFlow).toLocaleString() + " L/h; the pump supplies " + ctx.pumpCapacity.toLocaleString() + " L/h, so whole-plot operation is " +
+      (ctx.wholePlotFeasible ? "feasible" : "NOT feasible (scheduled at the pump's actual rate instead, which under-delivers vs. the all-at-once ideal)") +
+      ". Effective flow = <code>min(zoneDemandFlow, pumpCapacity)</code> = " + Math.round(ctx.effectiveFlow).toLocaleString() +
+      " L/h; daily cap = <code>effectiveFlow &times; maxHours</code> = " + Math.round(ctx.dailyCap).toLocaleString() +
+      " L/day. Event duration = <code>volume &divide; effectiveFlow</code>, kept to minute precision, never rounded up to a whole hour. " +
+      "This is a simplified capacity check (whole-plot flow vs. pump rating only), not a pressure-network/hydraulic design — no zones are modeled.</p>");
+
+    parts.push(ctx.rawWeeklyTotal > ctx.budget ?
+      "<p><strong>Budget scaling — active.</strong> Raw weekly demand " + Math.round(ctx.rawWeeklyTotal).toLocaleString() + " L exceeds the " +
+        ctx.budget.toLocaleString() + " L budget, so every irrigation day is scaled by <code>budget &divide; rawWeeklyTotal</code> = " +
+        (ctx.scale * 100).toFixed(1) + "% before hardware capping is applied.</p>" :
+      "<p><strong>Budget scaling — not active.</strong> Raw weekly demand (" + Math.round(ctx.rawWeeklyTotal).toLocaleString() + " L) is within the " +
+        ctx.budget.toLocaleString() + " L budget. Hardware capping above is a separate, independent limit and can still apply even when this isn't.</p>");
+
+    if(ctx.compensation){
+      var c = ctx.compensation;
+      parts.push("<p><strong>Rest-day redistribution — active.</strong> " + DAYS[c.restDay] + "'s own need (" + Math.ceil(c.perTree) + " L/tree gross) is " +
+        (c.storageAware ? "sized against the soil-water balance below" : "split flat (no soil-balance data to reason from)") + ": " +
+        (c.beforeIdx !== -1 ? Math.ceil(c.beforeAmount) + " L/tree advanced onto " + DAYS[c.beforeIdx] : "none advanced (no day before in this view)") + "; " +
+        (c.afterIdx !== -1 ? Math.ceil(c.afterAmount) + " L/tree made up on " + DAYS[c.afterIdx] : "none made up (no day after in this view)") +
+        (c.carryoverPerTree > 0.5 ? "; " + Math.ceil(c.carryoverPerTree) + " L/tree unresolved, carried to next week" : "") + ".</p>");
+    } else if(ctx.restDay >= 0){
+      parts.push("<p><strong>Rest-day redistribution — not active.</strong> " + DAYS[ctx.restDay] + " isn't forecast to need water this week, so there's nothing to redistribute.</p>");
+    } else {
+      parts.push("<p><strong>Rest-day redistribution — not applicable.</strong> No rest day is configured; every day is watered on its own.</p>");
+    }
+
+    parts.push(ctx.soilCtx.enabled && ctx.soilCtx.tawRaw.valid ?
+      "<p><strong>Soil-water balance — active.</strong> <code>TAW = 1,000 &times; (FC &minus; WP) &times; root depth</code> = " +
+        Math.round(ctx.soilCtx.tawRaw.taw) + " mm; <code>RAW = depletion fraction &times; TAW</code> = " + Math.round(ctx.soilCtx.tawRaw.raw) +
+        " mm. Depletion is tracked in mm per tree's reference area, day to day, and currently feeds only the rest-day advance-watering decision above — it does not yet feed back into any other day's own scheduled amount.</p>" :
+      "<p><strong>Soil-water balance — " + (ctx.soilCtx.tawRaw.valid ? "off" : "invalid, FC must exceed WP") +
+        ".</strong> Ignored in this plan's actual schedule; rest-day redistribution above uses the flat fallback instead.</p>");
+
+    parts.push("<p><strong>Ignored this mode.</strong> " +
+      (ctx.mode === "assignment" ? "Live forecast fetch, map/location pull, and numeric ET&#8320; — every number above comes from the baseline/category path. " : "") +
+      (!ctx.sensorEnabled ? "Today's manual sensor override is off, so it plays no part in any number above." : "Today's manual sensor reading is active and overrides the normal calculation for today only.") +
+      "</p>");
+
+    parts.push('<p style="color:var(--muted);">Sources: <a href="https://www.fao.org/4/x0490e/x0490e0b.htm" target="_blank" rel="noopener">FAO-56, crop evapotranspiration</a> (ET&#8320;&times;kc), ' +
+      '<a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">FAO-56, soil water balance</a> (TAW/RAW), ' +
+      '<a href="https://ipm.ucanr.edu/agriculture/avocado/monitor-and-manage-irrigation/" target="_blank" rel="noopener">UC IPM, avocado irrigation</a>. ' +
+      "Crop coefficients, soil-type multipliers, rot-sensitivity/heat/water factors, the " + Math.round(INFILTRATION * 100) +
+      "% rainfall-infiltration figure, the " + "40-trees/dunam reference density, and the soil-water-balance defaults are this app's own estimates built from that general guidance — not a validated reading for any specific plot. Replace them with real field/agronomist data where you have it.</p>");
+
+    body.innerHTML = parts.join("");
+  }
+
   // ---------- Day cards (forecast input) ----------
   function buildDayCards(){
     var el = $("dayCards");
@@ -2005,6 +2199,11 @@
     }
 
     var raw = DAYS.map(function(_, i){ return i === restDay ? 0 : rawNeedForDay(i); });
+    // Snapshot BEFORE the compensation block below adds advance/make-up water onto raw[] — the
+    // chart needs each day's OWN demand, not demand-plus-what-got-redistributed-onto-it, or an
+    // advance-watered day would look like its own need grew rather than looking like what it
+    // actually is (a day legitimately carrying extra for tomorrow's rest day).
+    var ownNeed = raw.slice();
 
     // The rest day doesn't just lose its water — whatever it would have needed gets split onto the
     // day before and the day after, so the tree still gets its full week of water, just not on the
@@ -2139,6 +2338,16 @@
 
     $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
     renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree);
+    renderDemandChart(ownNeed, litersPerTree, restDay, compensation);
+    renderFormulasPanel({
+      mode: state.mode, source: state.source,
+      area: area, density: density, trees: trees, REFERENCE_DENSITY: REFERENCE_DENSITY, effAreaPerTree: effAreaPerTree, densityFactor: densityFactor,
+      baseline: baseline, soilFactor: soilFactor, variety: variety,
+      budget: budget, emitterFlow: emitterFlow, pumpCapacity: pumpCapacity, maxHours: maxHours, efficiency: efficiency, efficiencyPct: efficiencyPct,
+      zoneDemandFlow: zoneDemandFlow, wholePlotFeasible: wholePlotFeasible, effectiveFlow: effectiveFlow, dailyCap: dailyCap,
+      restDay: restDay, compensation: compensation, rawWeeklyTotal: rawWeeklyTotal, scale: scale,
+      soilCtx: soilCtx, sensorEnabled: sensor.enabled
+    });
 
     var soilLabel = $("soil").options[$("soil").selectedIndex].text;
     var printWeekDates = state.weekDates ? state.weekDates.filter(function(d){ return d; }).sort() : [];
