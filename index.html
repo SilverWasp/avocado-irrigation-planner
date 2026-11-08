@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Avocado Irrigation Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  /* layout: location map -> plot/pump limits -> forecast -> output plan, all stacked single-column panels */
+  :root{
+    --bg:#f5f0e4;
+    --surface:#ffffff;
+    --ink:#22281f;
+    --muted:#5c6a56;
+    --avocado:#3c5a40;
+    --soil:#8a5f3c;
+    --water:#2a7a94;
+    --warn:#b5482f;
+    --border:rgba(34,40,31,0.14);
+    --font-display:'Fraunces',"Iowan Old Style",serif;
+    --font-body:'Public Sans',-apple-system,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#181c16;
+      --surface:#222820;
+      --ink:#eef0e8;
+      --muted:#9aa693;
+      --avocado:#8fc29a;
+      --soil:#c99a6c;
+      --water:#6fc3dc;
+      --warn:#e08567;
+      --border:rgba(238,240,232,0.14);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#181c16;
+    --surface:#222820;
+    --ink:#eef0e8;
+    --muted:#9aa693;
+    --avocado:#8fc29a;
+    --soil:#c99a6c;
+    --water:#6fc3dc;
+    --warn:#e08567;
+    --border:rgba(238,240,232,0.14);
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    padding-left:max(16px, env(safe-area-inset-left,0px));
+    padding-right:max(16px, env(safe-area-inset-right,0px));
+    padding-block:28px 48px;
+    line-height:1.5;
+  }
+  .wrap{max-width:980px;margin:0 auto;}
+
+  header h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:clamp(1.6rem,4vw,2.3rem);
+    margin:0 0 6px;
+    text-wrap:balance;
+    color:var(--avocado);
+  }
+  header p{margin:0;color:var(--muted);max-width:62ch;}
+  header{margin-bottom:24px;}
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px 20px;
+  }
+
+  details.panel{padding:0;overflow:hidden;}
+  details.panel summary{
+    list-style:none;
+    cursor:pointer;
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  details.panel summary::-webkit-details-marker{display:none;}
+  details.panel summary::after{
+    content:"";
+    margin-left:auto;
+    width:9px;height:9px;
+    border-right:2px solid var(--muted);
+    border-bottom:2px solid var(--muted);
+    transform:rotate(45deg);
+    transition:transform 0.15s ease;
+  }
+  details.panel[open] summary::after{transform:rotate(-135deg);}
+  details.panel summary h2, details.panel summary .eyebrow{margin:0;}
+  details.panel > *:not(summary){padding:0 20px 18px;}
+  details.panel[open] summary{padding-bottom:10px;}
+
+  .step-num{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:20px;height:20px;
+    border-radius:50%;
+    background:var(--avocado);
+    color:var(--bg);
+    font-family:var(--font-mono);
+    font-size:0.72rem;
+    flex-shrink:0;
+  }
+  p.eyebrow .step-num{margin-right:6px;}
+
+  .plan-panel{border-color:var(--avocado);border-width:1.5px;}
+  .narrative{
+    font-size:0.98rem;
+    line-height:1.55;
+    margin:4px 0 2px;
+    padding:12px 14px;
+    background:var(--bg);
+    border-radius:10px;
+    border:1px solid var(--border);
+  }
+
+  #map{
+    width:100%;
+    height:260px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    margin-bottom:10px;
+    background:var(--bg);
+  }
+  .map-fallback{padding:14px;color:var(--muted);font-size:0.85rem;}
+  .latlon-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
+  .latlon-row .field{flex:1;min-width:110px;margin-bottom:0;}
+  .latlon-row button{white-space:nowrap;}
+
+  .soil-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px;}
+  .soil-row .field{flex:1;min-width:180px;margin-bottom:0;}
+
+  .computed-stat{font-family:var(--font-mono);font-size:0.78rem;color:var(--muted);margin:-4px 0 12px;}
+  .computed-stat strong{color:var(--ink);}
+
+  .source-toggle{display:flex;gap:8px;margin-bottom:14px;}
+  .toggle-btn{
+    flex:1;
+    background:var(--bg);
+    color:var(--muted);
+    border:1px solid var(--border);
+    font-weight:500;
+    padding:8px 10px;
+  }
+  .toggle-btn.active{background:var(--avocado);color:var(--bg);border-color:var(--avocado);}
+
+  .live-panel{
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:14px;
+    background:var(--bg);
+  }
+  .live-panel button{margin-top:2px;}
+  .fetch-status{font-size:0.78rem;color:var(--muted);margin:10px 0 0;line-height:1.5;}
+  .fetch-status.error{color:var(--warn);}
+
+  .plan-cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(100px,1fr));
+    gap:8px;
+    margin:14px 0;
+  }
+  .plan-card{
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:12px 8px;
+    text-align:center;
+    background:var(--bg);
+  }
+  .plan-card.rest{opacity:0.6;border-style:dashed;}
+  .plan-card.capped{border-color:var(--warn);}
+  .pc-day{font-family:var(--font-display);font-weight:600;font-size:0.92rem;}
+  .pc-date{display:block;font-family:var(--font-body);font-weight:400;font-size:0.66rem;color:var(--muted);}
+  .pc-liters{
+    font-family:var(--font-mono);
+    font-size:1.55rem;
+    font-variant-numeric:tabular-nums;
+    margin-top:8px;
+    line-height:1;
+  }
+  .pc-unit{display:block;font-size:0.6rem;color:var(--muted);font-family:var(--font-body);margin-top:3px;}
+  .pc-total{font-size:0.7rem;color:var(--muted);margin-top:6px;font-family:var(--font-mono);}
+  .pc-when{
+    display:inline-block;
+    margin-top:8px;
+    font-size:0.68rem;
+    font-family:var(--font-mono);
+    color:var(--water);
+    border:1px solid var(--water);
+    border-radius:999px;
+    padding:2px 8px;
+  }
+
+  .detail-toggle{margin-top:4px;}
+  .detail-toggle summary{
+    cursor:pointer;
+    font-size:0.82rem;
+    color:var(--muted);
+    padding:6px 0;
+    list-style:none;
+  }
+  .detail-toggle summary::-webkit-details-marker{display:none;}
+  .detail-toggle summary::before{content:"▸ ";}
+  .detail-toggle[open] summary::before{content:"▾ ";}
+  .detail-toggle .tableScroll{margin-top:8px;}
+
+  h2{
+    font-family:var(--font-display);
+    font-size:1.05rem;
+    margin:0 0 12px;
+    color:var(--ink);
+  }
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:0.68rem;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 4px;
+  }
+
+  label{display:block;font-size:0.82rem;color:var(--muted);margin-bottom:4px;}
+  .field{margin-bottom:12px; min-width:0;}
+  input[type=number], input[type=text], select{
+    width:100%;
+    padding:8px 10px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-mono);
+    font-size:0.95rem;
+  }
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ref-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(54px,1fr));gap:8px;}
+  .ref-grid input{font-size:0.82rem;padding:7px 6px;text-align:center;}
+
+  .day-card{
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 12px;
+    display:grid;
+    grid-template-columns:72px 1fr 1fr;
+    gap:8px;
+    align-items:center;
+    margin-bottom:8px;
+    min-width:0;
+  }
+  .day-card.rest{opacity:0.65;}
+  .day-card.is-today{border-color:var(--water);border-width:1.5px;}
+  .day-name{font-family:var(--font-display);font-weight:600;font-size:0.92rem;}
+  .day-name small{display:block;font-family:var(--font-body);font-weight:400;color:var(--muted);font-size:0.7rem;}
+
+  .sensor-wrap{grid-column:1 / -1;border-top:1px dashed var(--border);margin-top:4px;padding-top:8px;}
+  .sensor-toggle-label{display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--muted);cursor:pointer;}
+  .sensor-toggle-label input{width:auto;}
+  .sensor-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+  .sensor-fields input{font-size:0.82rem;}
+  .sensor-hint{grid-column:1 / -1;color:var(--water);font-size:0.68rem;line-height:1.4;}
+  @media (max-width:480px){ .sensor-fields{grid-template-columns:1fr;} }
+
+  .calendar{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;background:var(--bg);}
+  .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .cal-header button{padding:4px 10px;font-size:0.8rem;}
+  .cal-label{font-family:var(--font-display);font-weight:600;font-size:0.9rem;}
+  .cal-weekdays, .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .cal-weekdays{margin-bottom:4px;}
+  .cal-weekdays span{text-align:center;font-size:0.62rem;color:var(--muted);font-family:var(--font-mono);text-transform:uppercase;}
+  .cal-day{
+    aspect-ratio:1;
+    border:1px solid transparent;
+    border-radius:8px;
+    background:transparent;
+    color:var(--ink);
+    font-family:var(--font-mono);
+    font-size:0.78rem;
+    font-weight:400;
+    padding:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .cal-day.blank{visibility:hidden;}
+  .cal-day.muted{color:var(--muted);opacity:0.5;}
+  .cal-day.today{border-color:var(--avocado);}
+  .cal-day.selected{background:var(--avocado);color:var(--bg);}
+  .cal-day.selected.muted{background:var(--border);color:var(--muted);opacity:1;}
+  .cal-legend{font-size:0.72rem;color:var(--muted);margin-top:8px;line-height:1.5;}
+  .cal-legend .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--border);margin-right:4px;vertical-align:middle;}
+
+  .tableScroll{overflow-x:auto;margin-top:18px;border:1px solid var(--border);border-radius:14px;}
+  table{width:100%;border-collapse:collapse;min-width:720px;background:var(--surface);}
+  th,td{
+    text-align:left;
+    padding:10px 14px;
+    border-bottom:1px solid var(--border);
+    font-size:0.88rem;
+    vertical-align:top;
+  }
+  th{
+    font-family:var(--font-mono);
+    font-size:0.68rem;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+    background:var(--bg);
+  }
+  td.num, th.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .pill{
+    display:inline-block;
+    padding:2px 9px;
+    border-radius:999px;
+    font-size:0.72rem;
+    font-family:var(--font-mono);
+    border:1px solid var(--border);
+  }
+  .pill.hot{color:var(--warn);border-color:var(--warn);}
+  .pill.rainy{color:var(--water);border-color:var(--water);}
+  .pill.normal{color:var(--avocado);border-color:var(--avocado);}
+  .pill.rest{color:var(--muted);}
+
+  .bar-track{background:var(--bg);border-radius:4px;height:7px;margin-top:6px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--water);border-radius:4px;}
+
+  .summary{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:12px;
+    margin:18px 0;
+  }
+  @media (max-width:640px){ .summary{grid-template-columns:1fr;} }
+  .stat{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px 16px;
+  }
+  .stat .eyebrow{margin-bottom:6px;}
+  .stat .value{
+    font-family:var(--font-mono);
+    font-size:1.5rem;
+    font-variant-numeric:tabular-nums;
+  }
+  .stat .value.warn{color:var(--warn);}
+  .stat .sub{font-size:0.78rem;color:var(--muted);margin-top:2px;}
+
+  .warning-list{margin:0;padding-left:18px;color:var(--warn);font-size:0.85rem;}
+  .warning-list li{margin-bottom:4px;}
+
+  .controls-bottom{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+  button{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:0.85rem;
+    padding:9px 16px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--avocado);
+    color:var(--bg);
+    cursor:pointer;
+  }
+  button.secondary{background:transparent;color:var(--ink);}
+  button:disabled{opacity:0.6;cursor:default;}
+  button:focus-visible, input:focus-visible, select:focus-visible{outline:2px solid var(--water);outline-offset:1px;}
+
+  footer{margin-top:28px;color:var(--muted);font-size:0.78rem;max-width:68ch;}
+  footer p{margin:0 0 8px;}
+
+  .boot-error{
+    background:#fff0ed;
+    color:#7a2416;
+    border:1px solid #e0a393;
+    border-radius:10px;
+    padding:14px 16px;
+    margin-bottom:18px;
+    font-size:0.85rem;
+    line-height:1.5;
+  }
+  .boot-error strong{display:block;margin-bottom:4px;}
+  .boot-error pre{white-space:pre-wrap;word-break:break-word;font-size:0.76rem;margin:8px 0 0;}
+
+  .print-only{display:none;}
+  @media print{
+    body{background:#fff;color:#000;padding:0;}
+    .boot-error, .no-print, button{display:none !important;}
+    .print-only{display:block !important;}
+    .panel, details.panel, .plan-panel{border:1px solid #999;box-shadow:none;background:#fff;margin-bottom:10px;page-break-inside:avoid;}
+    .narrative{background:#fff;border-color:#999;}
+    table{min-width:0;}
+    th{background:#eee;color:#000;}
+    .tableScroll{overflow:visible;border-color:#999;}
+    .detail-toggle summary{display:none;}
+    .plan-cards{display:none;} /* the full table below covers the same ground, more completely, on paper */
+    .print-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:0.85rem;margin-bottom:10px;}
+    .print-summary-grid div{padding:2px 0;border-bottom:1px solid #ddd;}
+  }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Irrigation planning</p>
+    <h1>Avocado Irrigation Planner</h1>
+    <p>Pick any spot on the map. It pulls that location's soil and this week's real hourly forecast, and turns it into a day-by-day, hour-by-hour watering plan — liters per tree, kept inside your water budget and pump, biased to water a little less rather than risk root rot. Everything it pulls automatically, you can also override by hand.</p>
+  </header>
+
+  <div class="panel no-print" style="margin-bottom:14px;">
+    <p class="eyebrow"><span class="step-num">1</span> Location</p>
+    <h2>Where's the plot?</h2>
+    <div id="map"></div>
+
+    <div class="latlon-row">
+      <div class="field">
+        <label for="latInput">Latitude</label>
+        <input type="number" id="latInput" step="0.001">
+      </div>
+      <div class="field">
+        <label for="lonInput">Longitude</label>
+        <input type="number" id="lonInput" step="0.001">
+      </div>
+      <button type="button" class="secondary" id="refreshLocationBtn">Refresh data for this spot</button>
+    </div>
+
+    <div class="soil-row">
+      <div class="field">
+        <label for="soil">Soil type</label>
+        <select id="soil">
+          <option value="0.85" selected>Heavy clay-loam (retains moisture)</option>
+          <option value="1.0">Loam</option>
+          <option value="1.15">Sandy / fast-draining</option>
+        </select>
+      </div>
+      <button type="button" class="secondary" id="detectSoilBtn">Try precise live lookup (often unavailable)</button>
+    </div>
+    <p id="soilStatus" class="fetch-status">Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.</p>
+  </div>
+
+  <details class="panel no-print" open style="margin-bottom:14px;">
+    <summary>
+      <span class="step-num">2</span>
+      <span>
+        <p class="eyebrow">Set once per season</p>
+        <h2>Plot &amp; pump limits</h2>
+      </span>
+    </summary>
+    <div class="row2">
+      <div class="field">
+        <label for="area">Plot size (dunam, 1000m&sup2;)</label>
+        <input type="number" id="area" value="3" min="0.1" step="0.1">
+      </div>
+      <div class="field">
+        <label for="density">Tree density (trees / dunam)</label>
+        <input type="number" id="density" value="40" min="1" step="1">
+      </div>
+    </div>
+    <p class="computed-stat">= <strong id="treesOut">120</strong> trees on the plot, about <strong id="spacingOut">25</strong> m&sup2; of root/canopy zone each</p>
+
+    <div class="field">
+      <label for="variety">Avocado variety</label>
+      <select id="variety">
+        <option value="hass" selected>Hass</option>
+        <option value="fuerte">Fuerte</option>
+        <option value="ettinger">Ettinger</option>
+        <option value="pinkerton">Pinkerton</option>
+        <option value="reed">Reed</option>
+        <option value="bacon">Bacon</option>
+        <option value="zutano">Zutano</option>
+      </select>
+    </div>
+    <p class="computed-stat" id="varietyNote"></p>
+
+    <div class="field">
+      <label for="baseline">Baseline L / tree on a mild day (ET<sub>c</sub> estimate, for this variety)</label>
+      <input type="number" id="baseline" value="45" min="1" step="1">
+    </div>
+
+    <div class="field">
+      <label for="budget">Weekly water budget (L)</label>
+      <input type="number" id="budget" value="28000" min="1" step="100">
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label for="flowRate">Pump flow rate (L / hour)</label>
+        <input type="number" id="flowRate" value="1500" min="1" step="50">
+      </div>
+      <div class="field">
+        <label for="maxHours">Max irrigation hours / day</label>
+        <input type="number" id="maxHours" value="4" min="1" step="0.5">
+      </div>
+    </div>
+    <p class="computed-stat">= <strong id="dailyCapOut">6,000</strong> L/day ceiling from the pump</p>
+
+    <div class="field">
+      <label for="restday">Rest day — no irrigation</label>
+      <select id="restday">
+        <option value="6" selected>Saturday (Shabbat)</option>
+        <option value="0">Sunday</option>
+        <option value="1">Monday</option>
+        <option value="2">Tuesday</option>
+        <option value="3">Wednesday</option>
+        <option value="4">Thursday</option>
+        <option value="5">Friday</option>
+        <option value="-1">None</option>
+      </select>
+    </div>
+  </details>
+
+  <div class="panel no-print" style="margin-bottom:14px;">
+    <p class="eyebrow"><span class="step-num">3</span> This week</p>
+    <h2>What's the forecast?</h2>
+
+    <div class="calendar">
+      <div class="cal-header">
+        <button type="button" class="secondary" id="calPrevBtn">&larr;</button>
+        <span class="cal-label" id="calLabel"></span>
+        <button type="button" class="secondary" id="calNextBtn">&rarr;</button>
+      </div>
+      <div class="cal-weekdays">
+        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+      </div>
+      <div class="cal-grid" id="calendarGrid"></div>
+      <p class="cal-legend"><span class="swatch"></span>Greyed dates have no forecast yet (too far ahead or too far in the past) — still pickable, but you'll enter that week by hand.</p>
+    </div>
+
+    <div class="source-toggle" role="group" aria-label="Forecast input method">
+      <button type="button" class="toggle-btn active" id="srcManualBtn">Enter by hand</button>
+      <button type="button" class="toggle-btn" id="srcLiveBtn">Pull live forecast</button>
+    </div>
+
+    <div id="livePanel" class="live-panel" hidden>
+      <div class="row2">
+        <div class="field">
+          <label for="hotThreshold">Hot-day threshold (&deg;C max)</label>
+          <input type="number" id="hotThreshold" value="32" min="0" step="1">
+        </div>
+        <div class="field">
+          <label for="rainThreshold">Rain-day threshold (mm)</label>
+          <input type="number" id="rainThreshold" value="1" min="0" step="0.5">
+        </div>
+      </div>
+      <button type="button" id="fetchBtn">Fetch 7-day forecast for this location</button>
+      <p id="fetchStatus" class="fetch-status">Pulls daily and hourly data from Open-Meteo for the pin's coordinates. A day counts as rainy at or above the rain threshold, otherwise hot at or above the temperature threshold, otherwise normal. Edit any day below after pulling.</p>
+    </div>
+
+    <div id="dayCards"></div>
+  </div>
+
+  <div class="panel plan-panel" style="margin-bottom:14px;">
+    <p class="eyebrow"><span class="step-num">4</span> Output</p>
+    <h2>This week's irrigation plan</h2>
+    <div id="printSummary" class="print-only"></div>
+    <p id="narrative" class="narrative"></p>
+
+    <div id="planCards" class="plan-cards"></div>
+
+    <div class="summary" id="summary"></div>
+
+    <div id="warnings"></div>
+
+    <details class="detail-toggle">
+      <summary>Full table — liters per tree, timing, plot totals, and the comparison to last week</summary>
+      <div class="tableScroll">
+        <table id="scheduleTable">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Weather</th>
+              <th class="num">L / tree</th>
+              <th>Pump schedule</th>
+              <th class="num">Total poured (L)</th>
+              <th class="num">vs last week</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="scheduleBody"></tbody>
+        </table>
+      </div>
+    </details>
+
+    <div class="controls-bottom">
+      <button id="printBtn">Print / Save as PDF</button>
+      <button class="secondary" id="copyBtn">Copy schedule as text</button>
+      <button class="secondary" id="resetBtn">Reset to example week</button>
+    </div>
+  </div>
+
+  <details class="panel no-print" style="margin-bottom:14px;">
+    <summary>
+      <span>
+        <p class="eyebrow">Reference, optional</p>
+        <h2>Last week's schedule (L / tree)</h2>
+      </span>
+    </summary>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;">Used only to show how this week's plan differs from a schedule that already worked. Edit if last week looked different.</p>
+    <div id="refCards" class="ref-grid"></div>
+  </details>
+
+  <footer>
+    <p><strong>How the numbers are built.</strong> Each day's water need (ET<sub>c</sub>) is a baseline L/tree figure, raised on hot days and scaled by how well the soil at the pin holds moisture. The chosen avocado variety scales that baseline too (Mexican-race types like Bacon and Zutano need noticeably less than Guatemalan types like Reed) and also sets how early a moisture reading skips irrigation, since varieties differ in how prone they are to root rot. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing (assuming about 80% of it reaches the root zone) and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally; rest days are never watered. Any day whose demand would exceed the pump's flow rate &times; max hours is capped at that ceiling.</p>
+    <p><strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.</p>
+    <p><strong>Ground sensor.</strong> Only "today's" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.</p>
+    <p><strong>Choosing dates.</strong> The calendar sets which 7-day window "this week" means. Greyed-out dates have no forecast (Open-Meteo's own live range is roughly 90 days back to 15 days ahead) — you can still pick them, but you'll enter that week's weather by hand.</p>
+    <p><strong>Data sources.</strong> Weather, modeled soil moisture and ET0: Open-Meteo (reliable in testing). Soil type: a built-in table of named regional surveys plus global desert / Mediterranean / rainforest climate belts — this is the primary source precisely because it makes no network call and so cannot go down. ISRIC SoilGrids is offered as an optional live upgrade for extra precision, but it has proven unreliable in repeated testing (anywhere from under a second to a full timeout on the same query) and should not be relied on. Map: OpenStreetMap. If any live source can't be reached, the affected field falls back to whatever you last set by hand.</p>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  function reportBootError(err){
+    if(document.querySelector(".boot-error")) return;
+    var wrap = document.querySelector(".wrap") || document.body;
+    var banner = document.createElement("div");
+    banner.className = "boot-error";
+    var msg = (err && err.message) || String(err);
+    var stack = (err && err.stack) || "";
+    banner.innerHTML = "<strong>The page hit a script error and couldn't finish building the plan.</strong>" +
+      "Reload the page. If it keeps happening, copy this message to whoever's fixing it:<pre></pre>";
+    banner.querySelector("pre").textContent = msg + (stack ? "\n\n" + stack : "");
+    wrap.insertBefore(banner, wrap.firstChild);
+  }
+  window.addEventListener("error", function(e){ reportBootError(e.error || e.message); });
+  window.addEventListener("unhandledrejection", function(e){ reportBootError(e.reason); });
+
+  // Printing / saving as PDF needs the detail table expanded even if the viewer left it collapsed —
+  // force every <details> open for the print, then put back whatever the viewer actually had.
+  var detailsOpenState = [];
+  window.addEventListener("beforeprint", function(){
+    detailsOpenState = Array.from(document.querySelectorAll("details")).map(function(d){ return d.open; });
+    document.querySelectorAll("details").forEach(function(d){ d.open = true; });
+  });
+  window.addEventListener("afterprint", function(){
+    document.querySelectorAll("details").forEach(function(d, idx){ d.open = detailsOpenState[idx]; });
+  });
+
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var DEFAULT_WEATHER = ["hot","normal","normal","rainy","normal","hot","normal"];
+  var DEFAULT_REF = [40,40,40,40,40,40,0];
+  var DEFAULT_LAT = 33.05, DEFAULT_LON = 35.60;
+  var INFILTRATION = 0.8; // fraction of rainfall assumed to reach the root zone
+
+  // Water need, heat response, and root-rot sensitivity vary by variety/race — Mexican-race types
+  // (Bacon, Zutano) are the most drought- and cold-tolerant and the most rot-tolerant; Guatemalan
+  // types (Reed, Pinkerton) want more water and, for Pinkerton especially, are notably rot-prone.
+  // waterFactor and heatFactor scale the ETc baseline; rotSensitivity scales how early a moisture
+  // reading triggers a skip (see FIELD_CAPACITY_REF below).
+  var VARIETIES = {
+    hass:     { name: "Hass",     waterFactor: 1.00, heatFactor: 1.30, rotSensitivity: 1.1, note: "Industry standard. Moderate water need; roots are sensitive to waterlogging." },
+    fuerte:   { name: "Fuerte",   waterFactor: 0.90, heatFactor: 1.20, rotSensitivity: 0.9, note: "Mexican/Guatemalan hybrid. Broad climate tolerance; slightly lower water need than Hass." },
+    ettinger: { name: "Ettinger", waterFactor: 0.95, heatFactor: 1.25, rotSensitivity: 1.0, note: "Widely grown in Israel. Reasonably drought-tolerant." },
+    pinkerton:{ name: "Pinkerton",waterFactor: 1.05, heatFactor: 1.30, rotSensitivity: 1.3, note: "High-yielding Guatemalan type. Notably prone to root rot — water conservatively." },
+    reed:     { name: "Reed",     waterFactor: 1.15, heatFactor: 1.35, rotSensitivity: 1.0, note: "Guatemalan type. Higher water need; prefers warm conditions." },
+    bacon:    { name: "Bacon",    waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." },
+    zutano:   { name: "Zutano",   waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." }
+  };
+  function getVariety(){ return VARIETIES[$("variety").value] || VARIETIES.hass; }
+
+  // Instant, zero-network soil default, built from known regional soil surveys plus a coarse,
+  // well-documented global pattern (desert belts are sandy, Mediterranean-climate belts run
+  // clay-loam, equatorial rainforest belts run clay). This is deliberately the PRIMARY source,
+  // not a fallback: a live point API (ISRIC SoilGrids, tried in fetchSoil() below) can go down or
+  // slow to a crawl — this table can't, because it makes no network call at all. Checked in order
+  // (most specific first); anywhere not covered defaults to loam, the safest generic midpoint.
+  var SOIL_REGIONS = [
+    // Named local surveys (highest confidence)
+    { name: "Hula Valley", latMin: 32.9, latMax: 33.25, lonMin: 35.45, lonMax: 35.70, value: "0.85", label: "heavy clay-loam" },
+    { name: "Negev Desert", latMin: 29.5, latMax: 31.3, lonMin: 34.2, lonMax: 35.4, value: "1.15", label: "sandy / fast-draining" },
+    { name: "Galilee / Golan hills", latMin: 32.6, latMax: 33.5, lonMin: 35.1, lonMax: 36.0, value: "1.0", label: "loam" },
+    // Mediterranean-climate belts (checked before the broader desert belts below, since several
+    // of these sit on the coastal edge of one) — typically clay-rich terra rossa / clay-loam
+    { name: "Mediterranean basin", latMin: 30, latMax: 45, lonMin: -10, lonMax: 36, value: "0.85", label: "clay-loam (Mediterranean)" },
+    { name: "California", latMin: 32, latMax: 40, lonMin: -124, lonMax: -117, value: "0.85", label: "clay-loam (Mediterranean)" },
+    { name: "Central Chile", latMin: -37, latMax: -30, lonMin: -73, lonMax: -70, value: "0.85", label: "clay-loam (Mediterranean)" },
+    { name: "Southwest Australia", latMin: -35, latMax: -31, lonMin: 114, lonMax: 119, value: "0.85", label: "clay-loam (Mediterranean)" },
+    { name: "Western Cape", latMin: -34.5, latMax: -32, lonMin: 18, lonMax: 20, value: "0.85", label: "clay-loam (Mediterranean)" },
+    // Equatorial rainforest belts — heavily weathered, clay-rich soils
+    { name: "Amazon basin", latMin: -10, latMax: 5, lonMin: -75, lonMax: -50, value: "0.85", label: "clay (equatorial)" },
+    { name: "Congo basin", latMin: -5, latMax: 5, lonMin: 10, lonMax: 30, value: "0.85", label: "clay (equatorial)" },
+    { name: "Southeast Asia", latMin: -8, latMax: 8, lonMin: 95, lonMax: 141, value: "0.85", label: "clay (equatorial)" },
+    // Major desert belts — low organic matter, fast-draining
+    { name: "Sahara / Arabian desert belt", latMin: 15, latMax: 33, lonMin: -17, lonMax: 60, value: "1.15", label: "sandy / fast-draining" },
+    { name: "Kalahari / Namib", latMin: -29, latMax: -17, lonMin: 15, lonMax: 27, value: "1.15", label: "sandy / fast-draining" },
+    { name: "Australian Outback", latMin: -31, latMax: -19, lonMin: 118, lonMax: 141, value: "1.15", label: "sandy / fast-draining" },
+    { name: "North American SW desert", latMin: 23, latMax: 37, lonMin: -117, lonMax: -103, value: "1.15", label: "sandy / fast-draining" },
+    { name: "Central Asian desert belt", latMin: 34, latMax: 46, lonMin: 55, lonMax: 110, value: "1.15", label: "sandy / fast-draining" },
+    { name: "Atacama", latMin: -29, latMax: -17, lonMin: -72, lonMax: -68, value: "1.15", label: "sandy / fast-draining" },
+    { name: "Patagonia", latMin: -52, latMax: -39, lonMin: -72, lonMax: -65, value: "1.15", label: "sandy / fast-draining" }
+  ];
+
+  function localSoilEstimate(lat, lon){
+    for(var i = 0; i < SOIL_REGIONS.length; i++){
+      var r = SOIL_REGIONS[i];
+      if(lat >= r.latMin && lat <= r.latMax && lon >= r.lonMin && lon <= r.lonMax){
+        return { value: r.value, label: r.label, region: r.name };
+      }
+    }
+    return { value: "1.0", label: "loam", region: null };
+  }
+
+  function applyLocalSoilEstimate(){
+    var est = localSoilEstimate(state.lat, state.lon);
+    $("soil").value = est.value;
+    var status = $("soilStatus");
+    status.className = "fetch-status";
+    status.textContent = est.region ?
+      "Built-in estimate for " + est.region + ": " + est.label + ". Reliable (no network call) — override the dropdown if you know this plot better." :
+      "No specific region matched, so defaulting to loam as a neutral estimate. Reliable (no network call) — override the dropdown if you know this plot better.";
+  }
+
+  function $(id){ return document.getElementById(id); }
+  function pad2(n){ n = Math.round(n) % 24; if(n < 0) n += 24; return (n < 10 ? "0" : "") + n; }
+
+  // ---------- Date helpers (local calendar dates, not UTC) ----------
+  function isoFromDate(d){
+    var y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), day = String(d.getDate()).padStart(2,"0");
+    return y + "-" + m + "-" + day;
+  }
+  function todayISO(){ return isoFromDate(new Date()); }
+  function addDaysISO(iso, n){
+    var d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return isoFromDate(d);
+  }
+  function diffDaysISO(a, b){
+    var da = new Date(a + "T00:00:00"), db = new Date(b + "T00:00:00");
+    return Math.round((db - da) / 86400000);
+  }
+  // Open-Meteo's forecast endpoint only covers roughly today-90..today+15; outside that, a date
+  // is still pickable (the user can plan ahead and fill it by hand) but has no forecast to pull.
+  var FORECAST_PAST_DAYS = 90, FORECAST_FUTURE_DAYS = 15;
+  function hasForecastHorizon(iso){
+    var delta = diffDaysISO(todayISO(), iso);
+    return delta >= -FORECAST_PAST_DAYS && delta <= FORECAST_FUTURE_DAYS;
+  }
+  var TODAY_IDX = new Date().getDay(); // 0=Sun..6=Sat — "today" is a real-world fact, independent of any chosen week
+  // True only when weekday slot i is both today's weekday AND actually labeled with today's date —
+  // a Sunday slot showing some other week's Sunday is not "today", even though the index matches.
+  function isTodaySlot(i){
+    return i === TODAY_IDX && (!state.dates || !state.dates[i] || state.dates[i] === todayISO());
+  }
+
+  var weekStart = null; // null = "today"; set by the calendar. Never persisted — resets to today each visit.
+  var calendarMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+  // ---------- Ground sensor (today only — never persisted, since "today" changes every visit) ----------
+  var FIELD_CAPACITY_REF = 0.30; // m3/m3 — rough "comfortably moist" reference for the moisture-credit formula
+  var modelHint = { et0: null, moisture: null }; // Open-Meteo's own modeled estimate for today, shown as a hint
+  var sensor = { enabled: false, moistureVal: null, etVal: null };
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem("avocado-irrigation-v2");
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return null;
+  }
+  function saveState(state){
+    try{ localStorage.setItem("avocado-irrigation-v2", JSON.stringify(state)); }catch(e){}
+  }
+
+  var saved = loadState();
+  var isFirstVisit = !saved;
+  var state = {
+    weather: (saved && saved.weather) || DEFAULT_WEATHER.slice(),
+    rainfall: (saved && saved.rainfall) || [0,0,0,12,0,0,0],
+    ref: (saved && saved.ref) || DEFAULT_REF.slice(),
+    dates: (saved && saved.dates) || null,
+    source: (saved && saved.source) || "manual",
+    lat: (saved && typeof saved.lat === "number") ? saved.lat : DEFAULT_LAT,
+    lon: (saved && typeof saved.lon === "number") ? saved.lon : DEFAULT_LON,
+    hourlyByDate: (saved && saved.hourlyByDate) || {}
+  };
+
+  // weekStart never persists (it's reset to null = "today" above), so a persisted state.dates from a
+  // different week — picked via the calendar in an earlier session, or just a day that's since passed —
+  // would otherwise silently outlive its session and show as "today" when it no longer is. Discard it.
+  if(state.dates && state.dates.indexOf(todayISO()) === -1){
+    state.dates = null;
+    state.hourlyByDate = {};
+  }
+
+  function formatDate(iso){
+    try{
+      var d = new Date(iso + "T00:00:00");
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }catch(e){ return ""; }
+  }
+
+  function getDisplayOrder(){
+    if(state.dates && state.dates.every(function(d){ return d; })){
+      var earliest = state.dates.reduce(function(min, d){ return d < min ? d : min; });
+      var startWeekday = new Date(earliest + "T00:00:00").getDay();
+      var order = [];
+      for(var k = 0; k < 7; k++) order.push((startWeekday + k) % 7);
+      return order;
+    }
+    return [0,1,2,3,4,5,6];
+  }
+
+  function setSource(src){
+    state.source = src;
+    $("srcManualBtn").classList.toggle("active", src === "manual");
+    $("srcLiveBtn").classList.toggle("active", src === "live");
+    $("livePanel").hidden = src !== "live";
+    saveState(state);
+  }
+
+  // ---------- Calendar / week selection ----------
+  function setManualDatesFromStart(iso){
+    var dates = [null,null,null,null,null,null,null];
+    for(var k = 0; k < 7; k++){
+      var d = addDaysISO(iso, k);
+      var wd = new Date(d + "T00:00:00").getDay();
+      dates[wd] = d;
+    }
+    state.dates = dates;
+    saveState(state);
+  }
+
+  function setWeekStart(iso){
+    weekStart = iso;
+    setManualDatesFromStart(iso);
+    buildDayCards();
+    buildCalendar();
+
+    var end = addDaysISO(iso, 6);
+    if(state.source === "live"){
+      if(hasForecastHorizon(iso) && hasForecastHorizon(end)){
+        fetchForecast();
+      } else {
+        var status = $("fetchStatus");
+        status.className = "fetch-status error";
+        status.textContent = "This week falls outside the forecast range (about " + FORECAST_PAST_DAYS +
+          " days back to " + FORECAST_FUTURE_DAYS + " ahead) — enter it by hand below.";
+        render();
+      }
+    } else {
+      render();
+    }
+  }
+
+  function buildCalendar(){
+    var grid = $("calendarGrid");
+    if(!grid) return;
+    grid.innerHTML = "";
+
+    var year = calendarMonthCursor.getFullYear(), month = calendarMonthCursor.getMonth();
+    $("calLabel").textContent = calendarMonthCursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+    var firstWeekday = new Date(year, month, 1).getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var activeStart = weekStart || todayISO();
+    var activeEnd = addDaysISO(activeStart, 6);
+    var todayStr = todayISO();
+
+    for(var b = 0; b < firstWeekday; b++){
+      var blank = document.createElement("div");
+      blank.className = "cal-day blank";
+      grid.appendChild(blank);
+    }
+    for(var day = 1; day <= daysInMonth; day++){
+      var iso = isoFromDate(new Date(year, month, day));
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cal-day";
+      btn.textContent = String(day);
+      if(iso === todayStr) btn.classList.add("today");
+      if(iso >= activeStart && iso <= activeEnd) btn.classList.add("selected");
+      if(!hasForecastHorizon(iso)) btn.classList.add("muted");
+      btn.title = hasForecastHorizon(iso) ? "Forecast available" : "No forecast yet — you'll enter this day by hand";
+      btn.addEventListener("click", (function(pickedIso){
+        return function(){ setWeekStart(pickedIso); };
+      })(iso));
+      grid.appendChild(btn);
+    }
+  }
+
+  // ---------- Map ----------
+  var map = null, marker = null;
+
+  function updateLatLonInputs(){
+    $("latInput").value = state.lat.toFixed(3);
+    $("lonInput").value = state.lon.toFixed(3);
+  }
+
+  function setLocation(lat, lon, skipPull){
+    state.lat = Math.round(lat * 1000) / 1000;
+    state.lon = Math.round(lon * 1000) / 1000;
+    updateLatLonInputs();
+    if(marker) marker.setLatLng([state.lat, state.lon]);
+    applyLocalSoilEstimate();
+    render();
+    saveState(state);
+    if(!skipPull) pullLocationData();
+  }
+
+  function initMap(){
+    try{
+      if(typeof L === "undefined") throw new Error("Leaflet didn't load");
+      // Touch pinch-zoom is on by Leaflet's own default; scroll-wheel zoom is opted in explicitly here.
+      map = L.map("map", { scrollWheelZoom: true, touchZoom: true }).setView([state.lat, state.lon], 9);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+      marker = L.marker([state.lat, state.lon], { draggable: true }).addTo(map);
+      map.on("click", function(e){ setLocation(e.latlng.lat, e.latlng.lng); });
+      marker.on("dragend", function(){
+        var p = marker.getLatLng();
+        setLocation(p.lat, p.lng);
+      });
+    }catch(err){
+      var el = $("map");
+      if(el) el.innerHTML = '<p class="map-fallback">Map failed to load (no network access to the map tiles?). Use the latitude/longitude fields below instead.</p>';
+    }
+  }
+
+  function fetchWithTimeout(url, ms){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, ms);
+    return fetch(url, { signal: ctrl.signal }).finally(function(){ clearTimeout(timer); });
+  }
+
+  // ---------- Soil ----------
+  // Live point lookup against ISRIC SoilGrids. This service is frequently slow or unresponsive
+  // in practice (observed: anywhere from 0.4s to a full timeout for the same query), so it is never
+  // the only answer — applyLocalSoilEstimate() above already set a reasonable value with no network
+  // wait. This function only upgrades that default if the live service happens to answer in time.
+  function trySoilQuery(lat, lon, timeoutMs){
+    var url = "https://rest.isric.org/soilgrids/v2.0/properties/query?lon=" + lon +
+      "&lat=" + lat + "&property=clay&property=sand&depth=0-5cm&value=mean";
+    return fetchWithTimeout(url, timeoutMs)
+      .then(function(res){
+        if(!res.ok) throw new Error("Soil service returned " + res.status);
+        return res.json();
+      })
+      .then(function(data){
+        var layers = (data && data.properties && data.properties.layers) || [];
+        function readMean(name){
+          var layer = layers.filter(function(l){ return l.name === name; })[0];
+          var depth = layer && layer.depths && layer.depths[0];
+          var v = depth && depth.values && depth.values.mean;
+          return typeof v === "number" ? v / 10 : null;
+        }
+        var clay = readMean("clay"), sand = readMean("sand");
+        if(clay === null || sand === null) throw new Error("no data returned for this spot");
+        return { clay: clay, sand: sand };
+      });
+  }
+
+  // SoilGrids has measured out as genuinely flaky in practice — the same query can return in under a
+  // second or hang to a full timeout. A single attempt is a coin flip, so this tries twice (short
+  // timeouts each) before giving up to the regional default that's already showing.
+  function fetchSoil(){
+    var status = $("soilStatus");
+    status.className = "fetch-status";
+    status.textContent = "Trying live soil detection (ISRIC SoilGrids, attempt 1 of 2)…";
+
+    trySoilQuery(state.lat, state.lon, 7000)
+      .catch(function(){
+        status.textContent = "First attempt didn't respond — trying live soil detection again (attempt 2 of 2)…";
+        return trySoilQuery(state.lat, state.lon, 7000);
+      })
+      .then(function(result){
+        var clay = result.clay, sand = result.sand;
+        var value, label;
+        if(clay >= 30){ value = "0.85"; label = "heavy clay-loam"; }
+        else if(sand >= 60){ value = "1.15"; label = "sandy / fast-draining"; }
+        else { value = "1.0"; label = "loam"; }
+
+        $("soil").value = value;
+        status.className = "fetch-status";
+        status.textContent = "Detected " + label + " (clay " + clay.toFixed(0) + "%, sand " + sand.toFixed(0) +
+          "%) from ISRIC SoilGrids. Override the dropdown if you know this plot better.";
+        render();
+      })
+      .catch(function(err){
+        status.className = "fetch-status error";
+        var reason = err.name === "AbortError" ? "it didn't respond in time, twice" : err.message;
+        var current = $("soil").options[$("soil").selectedIndex].text;
+        status.textContent = "Live soil detection failed (" + reason + ") — this third-party service is " +
+          "unreliable right now. Keeping the regional default (" + current + "). Pick a different soil type " +
+          "by hand, or try live detection again later.";
+      });
+  }
+
+  // ---------- Weather ----------
+  function classifyDay(tempMax, precip, hotThreshold, rainThreshold){
+    if(precip >= rainThreshold) return "rainy";
+    if(tempMax >= hotThreshold) return "hot";
+    return "normal";
+  }
+
+  function fetchForecast(){
+    var status = $("fetchStatus");
+    var btn = $("fetchBtn");
+    var hotThreshold = Number($("hotThreshold").value) || 32;
+    var rainThreshold = Number($("rainThreshold").value) || 1;
+
+    btn.disabled = true;
+    status.className = "fetch-status";
+    status.textContent = "Fetching the forecast…";
+
+    var startDate = weekStart || todayISO();
+    var endDate = addDaysISO(startDate, 6);
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + state.lat + "&longitude=" + state.lon +
+      "&daily=temperature_2m_max,precipitation_sum,et0_fao_evapotranspiration&hourly=precipitation,soil_moisture_0_to_10cm" +
+      "&timezone=auto&start_date=" + startDate + "&end_date=" + endDate;
+
+    fetchWithTimeout(url, 12000)
+      .then(function(res){
+        if(!res.ok) throw new Error("Weather service returned " + res.status);
+        return res.json();
+      })
+      .then(function(data){
+        var d = data.daily;
+        if(!d || !d.time) throw new Error("Unexpected response shape");
+
+        var newDates = state.dates || [null,null,null,null,null,null,null];
+        d.time.forEach(function(iso, idx){
+          var weekday = new Date(iso + "T00:00:00").getDay(); // 0=Sun..6=Sat, matches DAYS order
+          var tempMax = d.temperature_2m_max[idx];
+          var precip = d.precipitation_sum[idx] || 0;
+          state.weather[weekday] = classifyDay(tempMax, precip, hotThreshold, rainThreshold);
+          // Store the real forecast rainfall regardless of the hot/normal/rainy label — that label is
+          // just a display threshold; the irrigation math should credit every bit of real rain, even a
+          // sub-threshold drizzle on a day otherwise classified "normal".
+          state.rainfall[weekday] = Math.round(precip * 10) / 10;
+          newDates[weekday] = iso;
+        });
+        state.dates = newDates;
+
+        var h = data.hourly;
+        if(h && h.time && h.precipitation){
+          var byDate = {};
+          h.time.forEach(function(iso, idx){
+            var dateStr = iso.slice(0,10);
+            var hour = Number(iso.slice(11,13));
+            if(!byDate[dateStr]) byDate[dateStr] = new Array(24).fill(0);
+            byDate[dateStr][hour] = h.precipitation[idx] || 0;
+          });
+          state.hourlyByDate = byDate;
+        }
+
+        // Model-estimated ET0 and soil moisture for today specifically, shown as a hint on the
+        // ground-sensor card — not used in the math unless the sensor toggle is on and empty.
+        var todayStr = todayISO();
+        var todayIdxInResponse = d.time.indexOf(todayStr);
+        if(todayIdxInResponse !== -1 && d.et0_fao_evapotranspiration){
+          modelHint.et0 = d.et0_fao_evapotranspiration[todayIdxInResponse];
+        }
+        if(h && h.time && h.soil_moisture_0_to_10cm){
+          var todayHourIdx = h.time.indexOf(todayStr + "T12:00");
+          if(todayHourIdx !== -1) modelHint.moisture = h.soil_moisture_0_to_10cm[todayHourIdx];
+        }
+
+        buildDayCards();
+        render();
+        status.textContent = "Pulled " + formatDate(d.time[0]) + " – " + formatDate(d.time[d.time.length-1]) +
+          ". Edit any day below if it needs a human override.";
+      })
+      .catch(function(err){
+        status.className = "fetch-status error";
+        var reason = err.name === "AbortError" ? "it took too long to respond" : err.message;
+        status.textContent = "Couldn't reach the forecast service (" + reason + "). Enter the week by hand instead.";
+      })
+      .finally(function(){
+        btn.disabled = false;
+      });
+  }
+
+  function pullLocationData(){
+    fetchSoil();
+    if(state.source === "live") fetchForecast();
+  }
+
+  // ---------- Irrigation timing ----------
+  function pickIrrigationWindow(hourlyArr){
+    if(!hourlyArr){
+      return { label: "early morning (default)", start: 5, end: 7, dataBacked: false };
+    }
+    function avg(s, e){
+      var sum = 0;
+      for(var h = s; h < e; h++) sum += hourlyArr[h] || 0;
+      return sum / (e - s);
+    }
+    var opts = [
+      { label: "early morning", start: 4, end: 8 },
+      { label: "evening", start: 18, end: 22 },
+      { label: "late night", start: 22, end: 24 }
+    ];
+    opts.forEach(function(o){ o.avg = avg(o.start, o.end); });
+    opts.sort(function(a, b){ return a.avg - b.avg; });
+    var best = opts[0];
+    return { label: best.label, start: best.start, end: best.end, dataBacked: true };
+  }
+
+  function formatWindow(win, hoursNeeded){
+    var end = Math.min(win.end, win.start + Math.max(1, hoursNeeded));
+    return pad2(win.start) + ":00–" + pad2(end) + ":00";
+  }
+
+  // Spelled out for the detail table / printout, so it reads as a literal instruction a farmer
+  // can act on — not just a time range to interpret.
+  function formatWindowLong(win, hoursNeeded){
+    var end = Math.min(win.end, win.start + Math.max(1, hoursNeeded));
+    return "Open " + pad2(win.start) + ":00 → close " + pad2(end) + ":00";
+  }
+
+  // ---------- Day cards (forecast input) ----------
+  function buildDayCards(){
+    var el = $("dayCards");
+    el.innerHTML = "";
+    getDisplayOrder().forEach(function(i){
+      var name = DAYS[i];
+      var isActuallyToday = isTodaySlot(i);
+      var card = document.createElement("div");
+      card.className = "day-card";
+      card.id = "day-"+i;
+
+      if(isActuallyToday) card.classList.add("is-today");
+
+      var nameDiv = document.createElement("div");
+      nameDiv.className = "day-name";
+      var sub = state.dates && state.dates[i] ? formatDate(state.dates[i]) : name;
+      if(isActuallyToday) sub += " · today";
+      nameDiv.innerHTML = name.slice(0,3) + "<small>"+sub+"</small>";
+      card.appendChild(nameDiv);
+
+      var sel = document.createElement("select");
+      sel.innerHTML =
+        '<option value="hot">Hot</option>' +
+        '<option value="normal">Normal</option>' +
+        '<option value="rainy">Rainy</option>';
+      sel.value = state.weather[i];
+      sel.addEventListener("change", function(){
+        state.weather[i] = sel.value;
+        render();
+      });
+      card.appendChild(sel);
+
+      var rainWrap = document.createElement("div");
+      var rainInput = document.createElement("input");
+      rainInput.type = "number";
+      rainInput.min = "0";
+      rainInput.step = "1";
+      rainInput.placeholder = "rain mm";
+      rainInput.value = state.rainfall[i] || "";
+      rainInput.style.display = state.weather[i] === "rainy" ? "block" : "none";
+      rainInput.addEventListener("input", function(){
+        state.rainfall[i] = Number(rainInput.value) || 0;
+        render();
+      });
+      if(state.weather[i] !== "rainy" && state.rainfall[i] > 0){
+        var hint = document.createElement("small");
+        hint.style.color = "var(--water)";
+        hint.style.fontSize = "0.68rem";
+        hint.textContent = "+" + state.rainfall[i] + "mm forecast, credited anyway";
+        rainWrap.appendChild(hint);
+      }
+      sel.addEventListener("change", function(){
+        rainInput.style.display = sel.value === "rainy" ? "block" : "none";
+      });
+      rainWrap.appendChild(rainInput);
+      card.appendChild(rainWrap);
+
+      if(isActuallyToday){
+        card.appendChild(buildSensorBlock());
+      }
+
+      el.appendChild(card);
+    });
+  }
+
+  // Ground-sensor override — applies only to today, since (per design) the user can report a real
+  // reading for right now but can't measure the future and can't change what already happened.
+  function buildSensorBlock(){
+    var wrap = document.createElement("div");
+    wrap.className = "sensor-wrap";
+
+    var toggleLabel = document.createElement("label");
+    toggleLabel.className = "sensor-toggle-label";
+    var toggleInput = document.createElement("input");
+    toggleInput.type = "checkbox";
+    toggleInput.checked = sensor.enabled;
+    toggleLabel.appendChild(toggleInput);
+    toggleLabel.appendChild(document.createTextNode(" I have a real sensor reading for right now"));
+    wrap.appendChild(toggleLabel);
+
+    var fieldsWrap = document.createElement("div");
+    fieldsWrap.className = "sensor-fields";
+    fieldsWrap.hidden = !sensor.enabled;
+
+    var moistureField = document.createElement("input");
+    moistureField.type = "number";
+    moistureField.step = "0.01";
+    moistureField.min = "0";
+    moistureField.max = "1";
+    moistureField.placeholder = "soil moisture, m³/m³ (e.g. 0.20)";
+    moistureField.value = sensor.moistureVal != null ? sensor.moistureVal : "";
+    moistureField.addEventListener("input", function(){
+      sensor.moistureVal = moistureField.value === "" ? null : Number(moistureField.value);
+      render();
+    });
+    fieldsWrap.appendChild(moistureField);
+
+    var etField = document.createElement("input");
+    etField.type = "number";
+    etField.step = "0.1";
+    etField.min = "0";
+    etField.placeholder = "measured evapotranspiration, mm (e.g. 3.5)";
+    etField.value = sensor.etVal != null ? sensor.etVal : "";
+    etField.addEventListener("input", function(){
+      sensor.etVal = etField.value === "" ? null : Number(etField.value);
+      render();
+    });
+    fieldsWrap.appendChild(etField);
+
+    var hintParts = [];
+    if(modelHint.moisture != null) hintParts.push("modeled moisture ~" + modelHint.moisture.toFixed(2) + " m³/m³");
+    if(modelHint.et0 != null) hintParts.push("modeled ET0 ~" + modelHint.et0.toFixed(1) + "mm");
+    var hint = document.createElement("small");
+    hint.className = "sensor-hint";
+    hint.textContent = hintParts.length ?
+      "For reference (" + hintParts.join(", ") + ") — your real reading overrides this." :
+      "Pull a live forecast for a modeled reference value, or just enter your own reading.";
+    fieldsWrap.appendChild(hint);
+
+    wrap.appendChild(fieldsWrap);
+
+    toggleInput.addEventListener("change", function(){
+      sensor.enabled = toggleInput.checked;
+      fieldsWrap.hidden = !sensor.enabled;
+      render();
+    });
+
+    return wrap;
+  }
+
+  function buildRefCards(){
+    var el = $("refCards");
+    el.innerHTML = "";
+    DAYS.forEach(function(name, i){
+      var wrap = document.createElement("div");
+      wrap.className = "field";
+      wrap.style.marginBottom = "0";
+      var label = document.createElement("label");
+      label.textContent = name.slice(0,3);
+      var input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.step = "5";
+      input.value = state.ref[i];
+      input.addEventListener("input", function(){
+        state.ref[i] = Number(input.value) || 0;
+        render();
+      });
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      el.appendChild(wrap);
+    });
+  }
+
+  function weatherLabel(w){
+    if(w === "hot") return '<span class="pill hot">Hot</span>';
+    if(w === "rainy") return '<span class="pill rainy">Rainy</span>';
+    return '<span class="pill normal">Normal</span>';
+  }
+
+  function noteFor(w, isRest, capped, litersPerTree, rainMm){
+    if(isRest) return "Rest day — no irrigation.";
+    if(capped) return "Capped at the pump's flow rate for the window; make up any shortfall the next irrigation day.";
+    if(rainMm > 0 && litersPerTree <= 0){
+      return "Rainfall (" + rainMm + "mm) already covers the day's need — skipped to avoid over-watering and root rot.";
+    }
+    if(rainMm > 0){
+      return "Rainfall (" + rainMm + "mm) credited against today's need — topped up only the rest, never beyond it." +
+        (w === "hot" ? " Heat still pushes the baseline need up." : "");
+    }
+    if(w === "hot") return "Heat raises evapotranspiration — watered above baseline, capped at the estimated need.";
+    return "Baseline demand for a normal day.";
+  }
+
+  function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows){
+    var hotIdx = -1, normalIdx = -1, rainyIdx = -1;
+    DAYS.forEach(function(d, i){
+      if(i === restDay) return;
+      if(state.weather[i] === "hot" && hotIdx === -1) hotIdx = i;
+      if(state.weather[i] === "normal" && normalIdx === -1) normalIdx = i;
+      if(state.weather[i] === "rainy" && rainyIdx === -1) rainyIdx = i;
+    });
+    var hotDays = DAYS.filter(function(d,i){ return i!==restDay && state.weather[i]==="hot"; });
+    var rainyDays = DAYS.filter(function(d,i){ return i!==restDay && state.weather[i]==="rainy"; });
+    var irrigationDays = restDay >= 0 ? 6 : 7;
+
+    var parts = [];
+    parts.push("Water " + irrigationDays + " of 7 days this week" +
+      (restDay >= 0 ? ", skipping " + DAYS[restDay] + " (rest day)" : "") + ".");
+
+    if(hotDays.length && normalIdx !== -1){
+      parts.push(hotDays.join(" and ") + " run hottest — about " + Math.floor(litersPerTree[hotIdx]) +
+        " L/tree, versus " + Math.floor(litersPerTree[normalIdx]) + " L/tree on a normal day.");
+    } else if(hotDays.length){
+      parts.push(hotDays.join(" and ") + " run hottest — about " + Math.floor(litersPerTree[hotIdx]) + " L/tree.");
+    }
+
+    if(rainyDays.length){
+      if(litersPerTree[rainyIdx] <= 0){
+        parts.push(rainyDays.join(" and ") + " " + (rainyDays.length > 1 ? "get" : "gets") +
+          " enough rain to skip irrigation entirely — watering on top of that would risk root rot.");
+      } else {
+        parts.push(rainyDays.join(" and ") + " " + (rainyDays.length > 1 ? "get" : "gets") +
+          " cut back for rain — about " + Math.floor(litersPerTree[rainyIdx]) + " L/tree.");
+      }
+    }
+
+    if(hotIdx !== -1 && windows[hotIdx] && windows[hotIdx].dataBacked){
+      parts.push("Best window on " + DAYS[hotIdx] + ": " + formatWindow(windows[hotIdx], 2) + ", the driest stretch in the hourly forecast.");
+    }
+
+    if(cappedDays.length){
+      parts.push("Pump flow limits " + cappedDays.length + " day(s) (" + cappedDays.join(", ") +
+        ") below the model's target — plan a top-up on the next irrigation day.");
+    } else if(scale < 0.999){
+      parts.push("Raw demand outran the weekly budget, so every irrigation day was trimmed by about " +
+        Math.round((1 - scale) * 100) + "%.");
+    } else {
+      parts.push("Total use is " + Math.floor(weeklyFinal).toLocaleString() + " L, " + pctUsed.toFixed(0) +
+        "% of the " + budget.toLocaleString() + " L budget — comfortably inside both the budget and the pump.");
+    }
+
+    return parts.join(" ");
+  }
+
+  function render(){
+    var area = Math.max(0.1, Number($("area").value) || 3);
+    var density = Math.max(1, Number($("density").value) || 40);
+    var trees = Math.max(1, Math.round(area * density));
+    var areaPerTree = 1000 / density;
+    $("treesOut").textContent = trees.toLocaleString();
+    $("spacingOut").textContent = areaPerTree.toFixed(0);
+
+    var baseline = Math.max(1, Number($("baseline").value) || 45);
+    var soilFactor = Number($("soil").value) || 1;
+    var variety = getVariety();
+    $("varietyNote").textContent = variety.note;
+    var budget = Math.max(1, Number($("budget").value) || 28000);
+    var flowRate = Math.max(1, Number($("flowRate").value) || 1500);
+    var maxHours = Math.max(0.5, Number($("maxHours").value) || 4);
+    var dailyCap = flowRate * maxHours;
+    $("dailyCapOut").textContent = Math.round(dailyCap).toLocaleString();
+    var restDay = Number($("restday").value);
+
+    // ET demand minus real rainfall, never negative, never topped up beyond need
+    var raw = DAYS.map(function(_, i){
+      if(i === restDay) return 0;
+      var w = state.weather[i];
+      var useSensorEt = isTodaySlot(i) && sensor.enabled && sensor.etVal != null;
+      // A real measured ET reading for today replaces the modeled hot/normal estimate outright —
+      // it's a direct measurement, not a guess, so there's no reason to also apply the weather factor.
+      var etNeed = useSensorEt ? (sensor.etVal * areaPerTree) :
+        (baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor);
+      // Any recorded rainfall counts, not just days labeled "Rainy" — a sub-threshold
+      // drizzle on a "Normal" day still reduces how much needs to be irrigated.
+      var rainMm = state.rainfall[i] || 0;
+      var effectiveRainL = rainMm * areaPerTree * INFILTRATION;
+      var need = Math.max(0, etNeed - effectiveRainL);
+      // A real soil-moisture reading for today further credits whatever water is already in the ground —
+      // at or above the "comfortably moist" reference, skip today outright rather than risk root rot.
+      if(isTodaySlot(i) && sensor.enabled && sensor.moistureVal != null){
+        var effectiveFieldCapacity = FIELD_CAPACITY_REF / variety.rotSensitivity;
+        var moistureFactor = Math.max(0, 1 - (sensor.moistureVal / effectiveFieldCapacity));
+        need = need * moistureFactor;
+      }
+      return need;
+    });
+
+    var rawWeeklyTotal = raw.reduce(function(sum, l){ return sum + l * trees; }, 0);
+    var scale = rawWeeklyTotal > budget ? budget / rawWeeklyTotal : 1;
+
+    var litersPerTreeFloat = raw.map(function(l){ return l * scale; });
+    var plotTotalFloat = litersPerTreeFloat.map(function(l){ return l * trees; });
+    var cappedDays = [];
+
+    plotTotalFloat = plotTotalFloat.map(function(total, i){
+      if(total > dailyCap){
+        cappedDays.push(DAYS[i]);
+        litersPerTreeFloat[i] = dailyCap / trees;
+        return dailyCap;
+      }
+      return total;
+    });
+
+    // round down everywhere a final amount is shown or totaled — under-watering beats over-watering
+    var litersPerTree = litersPerTreeFloat.map(Math.floor);
+    var plotTotal = plotTotalFloat.map(Math.floor);
+
+    var weeklyFinal = plotTotal.reduce(function(a,b){ return a+b; }, 0);
+    var pctUsed = (weeklyFinal / budget) * 100;
+    var maxLiters = Math.max.apply(null, litersPerTree.concat([1]));
+
+    var windows = DAYS.map(function(_, i){
+      if(i === restDay || litersPerTree[i] <= 0) return null;
+      var hourlyArr = state.dates && state.dates[i] && state.hourlyByDate ? state.hourlyByDate[state.dates[i]] : null;
+      return pickIrrigationWindow(hourlyArr);
+    });
+    var hoursNeeded = DAYS.map(function(_, i){
+      return plotTotal[i] > 0 ? Math.max(1, Math.ceil(plotTotal[i] / flowRate)) : 0;
+    });
+
+    $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows);
+
+    var soilLabel = $("soil").options[$("soil").selectedIndex].text;
+    var weekDates = state.dates ? state.dates.filter(function(d){ return d; }).sort() : [];
+    var weekRange = weekDates.length ? formatDate(weekDates[0]) + " – " + formatDate(weekDates[weekDates.length-1]) : "this week";
+    $("printSummary").innerHTML =
+      "<p style=\"margin:0 0 6px;font-size:0.8rem;color:#555;\">Plan for " + weekRange + " — printed " + new Date().toLocaleDateString() + "</p>" +
+      '<div class="print-summary-grid">' +
+        "<div>Location: " + state.lat.toFixed(3) + ", " + state.lon.toFixed(3) + "</div>" +
+        "<div>Variety: " + variety.name + "</div>" +
+        "<div>Soil: " + soilLabel + "</div>" +
+        "<div>Trees: " + trees.toLocaleString() + " (" + $("area").value + " dunam, " + $("density").value + "/dunam)</div>" +
+        "<div>Weekly budget: " + budget.toLocaleString() + " L</div>" +
+        "<div>Pump: " + flowRate.toLocaleString() + " L/h, max " + maxHours + " h/day</div>" +
+        "<div>Rest day: " + (restDay >= 0 ? DAYS[restDay] : "none") + "</div>" +
+        "<div>Water used this week: " + weeklyFinal.toLocaleString() + " L (" + pctUsed.toFixed(0) + "% of budget)</div>" +
+      "</div>";
+
+    var cardsEl = $("planCards");
+    cardsEl.innerHTML = "";
+    getDisplayOrder().forEach(function(i){
+      var name = DAYS[i];
+      var isRest = i === restDay;
+      var capped = cappedDays.indexOf(name) !== -1;
+      var div = document.createElement("div");
+      div.className = "plan-card" + (isRest ? " rest" : "") + (capped ? " capped" : "");
+      var dateSub = state.dates && state.dates[i] ? '<span class="pc-date">' + formatDate(state.dates[i]) + '</span>' : "";
+      var whenHtml = (!isRest && litersPerTree[i] > 0) ?
+        '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
+      div.innerHTML =
+        '<div class="pc-day">' + name.slice(0,3) + dateSub + '</div>' +
+        (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(state.weather[i])) +
+        '<div class="pc-liters">' + litersPerTree[i] + '<span class="pc-unit">L / tree</span></div>' +
+        '<div class="pc-total">' + plotTotal[i].toLocaleString() + ' L total</div>' +
+        whenHtml;
+      cardsEl.appendChild(div);
+    });
+
+    // summary
+    var summary = $("summary");
+    summary.innerHTML =
+      '<div class="stat"><p class="eyebrow">Water used</p>' +
+        '<div class="value">' + weeklyFinal.toLocaleString() + ' L</div>' +
+        '<div class="sub">of ' + budget.toLocaleString() + ' L budget (' + pctUsed.toFixed(0) + '%)</div></div>' +
+      '<div class="stat"><p class="eyebrow">Irrigation days</p>' +
+        '<div class="value">' + litersPerTree.filter(function(l){return l>0;}).length + ' / 7</div>' +
+        '<div class="sub">' + (restDay >= 0 ? DAYS[restDay] + " is rest day" : "no rest day set") + '</div></div>' +
+      '<div class="stat"><p class="eyebrow">Pump headroom</p>' +
+        '<div class="value' + (cappedDays.length ? ' warn' : '') + '">' + Math.round(dailyCap).toLocaleString() + ' L/day</div>' +
+        '<div class="sub">' + (cappedDays.length ? cappedDays.length + " day(s) hit the cap" : "never exceeded this week") + '</div></div>';
+
+    var warnEl = $("warnings");
+    if(cappedDays.length){
+      warnEl.innerHTML = '<ul class="warning-list"><li>Pump flow limited irrigation on: ' + cappedDays.join(", ") + ". Trees on those days received less than the model's target — plan a top-up on the following irrigation day.</li></ul>";
+    } else if(rawWeeklyTotal > budget * 1.0001){
+      warnEl.innerHTML = '<ul class="warning-list"><li>Raw demand (' + Math.round(rawWeeklyTotal).toLocaleString() + " L) exceeded the weekly budget, so every irrigation day was scaled down by " + (scale*100).toFixed(0) + "%.</li></ul>";
+    } else {
+      warnEl.innerHTML = "";
+    }
+
+    var body = $("scheduleBody");
+    body.innerHTML = "";
+    getDisplayOrder().forEach(function(i){
+      var name = DAYS[i];
+      var isRest = i === restDay;
+      var capped = cappedDays.indexOf(name) !== -1;
+      var delta = litersPerTree[i] - (state.ref[i] || 0);
+      var deltaStr = (delta >= 0 ? "+" : "") + Math.round(delta) + " L";
+      var barPct = maxLiters > 0 ? Math.round((litersPerTree[i]/maxLiters)*100) : 0;
+      var dateLabel = state.dates && state.dates[i] ? " (" + formatDate(state.dates[i]) + ")" : "";
+      var whenCell = isRest ? "No irrigation" : litersPerTree[i] <= 0 ? "Skip — no watering needed" :
+        formatWindowLong(windows[i], hoursNeeded[i]) +
+        (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(default slot)</span>");
+
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + name + dateLabel + "</td>" +
+        "<td>" + (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(state.weather[i])) + "</td>" +
+        '<td class="num">' + litersPerTree[i] +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + barPct + '%"></div></div></td>' +
+        "<td>" + whenCell + "</td>" +
+        '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
+        '<td class="num">' + deltaStr + "</td>" +
+        "<td>" + noteFor(state.weather[i], isRest, capped, litersPerTree[i], state.rainfall[i]||0) +
+          (isTodaySlot(i) && sensor.enabled ? " <em>Adjusted using your sensor reading for today.</em>" : "") + "</td>";
+      body.appendChild(tr);
+    });
+
+    saveState(state);
+  }
+
+  function copySchedule(){
+    var rows = Array.from($("scheduleBody").querySelectorAll("tr")).map(function(tr){
+      return Array.from(tr.children).map(function(td){ return td.textContent.trim().replace(/\s+/g," "); }).join("\t");
+    });
+    var text = "Day\tWeather\tL/tree\tWhen\tPlot total (L)\tvs last week\tNotes\n" + rows.join("\n");
+    function fallback(){
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try{ document.execCommand("copy"); }catch(e){}
+      document.body.removeChild(ta);
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).catch(fallback);
+    } else {
+      fallback();
+    }
+    var btn = $("copyBtn");
+    var original = btn.textContent;
+    btn.textContent = "Copied";
+    setTimeout(function(){ btn.textContent = original; }, 1400);
+  }
+
+  function resetToExample(){
+    state.weather = DEFAULT_WEATHER.slice();
+    state.rainfall = [0,0,0,12,0,0,0];
+    state.ref = DEFAULT_REF.slice();
+    state.dates = null;
+    state.hourlyByDate = {};
+    weekStart = null;
+    calendarMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    sensor.enabled = false;
+    sensor.moistureVal = null;
+    sensor.etVal = null;
+    modelHint.et0 = null;
+    modelHint.moisture = null;
+    $("area").value = 3;
+    $("density").value = 40;
+    $("variety").value = "hass";
+    $("baseline").value = 45;
+    $("soil").value = "0.85";
+    $("budget").value = 28000;
+    $("flowRate").value = 1500;
+    $("maxHours").value = 4;
+    $("restday").value = "6";
+    setSource("manual");
+    setLocation(DEFAULT_LAT, DEFAULT_LON, true);
+    if(map) map.setView([DEFAULT_LAT, DEFAULT_LON], 9);
+    buildDayCards();
+    buildRefCards();
+    buildCalendar();
+    render();
+  }
+
+  ["area","density","variety","baseline","soil","budget","flowRate","maxHours","restday"].forEach(function(id){
+    $(id).addEventListener("input", render);
+    $(id).addEventListener("change", render);
+  });
+  $("copyBtn").addEventListener("click", copySchedule);
+  $("printBtn").addEventListener("click", function(){ window.print(); });
+  $("resetBtn").addEventListener("click", resetToExample);
+  $("srcManualBtn").addEventListener("click", function(){ setSource("manual"); });
+  $("srcLiveBtn").addEventListener("click", function(){ setSource("live"); });
+  $("fetchBtn").addEventListener("click", fetchForecast);
+  $("detectSoilBtn").addEventListener("click", fetchSoil);
+  $("refreshLocationBtn").addEventListener("click", function(){ pullLocationData(); });
+  $("latInput").addEventListener("change", function(){
+    var lat = Number($("latInput").value);
+    if(!isNaN(lat)) setLocation(lat, state.lon);
+  });
+  $("lonInput").addEventListener("change", function(){
+    var lon = Number($("lonInput").value);
+    if(!isNaN(lon)) setLocation(state.lat, lon);
+  });
+  $("calPrevBtn").addEventListener("click", function(){
+    calendarMonthCursor = new Date(calendarMonthCursor.getFullYear(), calendarMonthCursor.getMonth() - 1, 1);
+    buildCalendar();
+  });
+  $("calNextBtn").addEventListener("click", function(){
+    calendarMonthCursor = new Date(calendarMonthCursor.getFullYear(), calendarMonthCursor.getMonth() + 1, 1);
+    buildCalendar();
+  });
+
+  if(!state.dates) setManualDatesFromStart(todayISO());
+
+  updateLatLonInputs();
+  applyLocalSoilEstimate();
+  setSource(state.source);
+  initMap();
+  buildDayCards();
+  buildRefCards();
+  buildCalendar();
+  render();
+
+  if(isFirstVisit){
+    setSource("live");
+    pullLocationData();
+  }
+})();
+</script>
+</body>
+</html>
