@@ -1497,31 +1497,46 @@
     });
   }
 
-  // Reads the soil-water balance inputs, validates them, and renders both the TAW/RAW note and the
-  // (optional) per-day diagnostic table. litersPerTree/effAreaPerTree/variety/restDay come from the
-  // same render() pass that already decided the schedule, so the irrigation column reflects exactly
-  // what the plan above delivers, not a separate guess.
-  function renderSoilBalance(litersPerTree, effAreaPerTree, variety){
+  // Reads the soil-water balance inputs once and returns the shared pieces both the compensation
+  // logic (deciding the schedule) and renderSoilBalance (displaying its diagnostic) need: whether
+  // the model is even switched on, TAW/RAW (with FC>WP validation), which days have real ET0 to
+  // simulate, and each day's ET/rain depth. Kept separate from render() so both call sites read
+  // the exact same numbers rather than two independently-maintained copies drifting apart.
+  function getSoilBalanceContext(variety){
     var fcPct = numOr("fieldCapacity", 32), wpPct = numOr("wiltingPoint", 17);
     var rootDepthM = numOr("rootDepth", 0.6), depletionPct = numOr("depletionFraction", 35);
     var tawRaw = computeTAWRAW(fcPct, wpPct, rootDepthM, depletionPct);
+    var known = DAYS.map(function(_, i){ return typeof dayAt(i).et0 === "number"; });
+    var etMm = DAYS.map(function(_, i){ return known[i] ? dayAt(i).et0 * variety.kc : 0; });
+    var rainMm = DAYS.map(function(_, i){ return (dayAt(i).rainfall || 0) * INFILTRATION; });
+    var startDepletion = $("startMoisture").value === "full" ? 0 : tawRaw.raw;
+    return {
+      enabled: $("soilBalanceEnabled").checked, tawRaw: tawRaw, known: known, etMm: etMm, rainMm: rainMm,
+      startDepletion: startDepletion, fcPct: fcPct, wpPct: wpPct, rootDepthM: rootDepthM
+    };
+  }
+
+  // Renders the TAW/RAW note and the (optional) per-day diagnostic table from a context already
+  // computed by getSoilBalanceContext(). litersPerTree/effAreaPerTree come from the same render()
+  // pass that already decided the schedule (including any storage-aware rest-day compensation),
+  // so the irrigation column reflects exactly what the plan above delivers, not a separate guess.
+  function renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree){
+    var tawRaw = soilCtx.tawRaw;
     var note = $("tawRawNote"), panel = $("soilBalancePanel");
     if(!tawRaw.valid){
-      note.textContent = "Field capacity (" + fcPct + "%) must be greater than wilting point (" + wpPct + "%), and root depth must be positive — fix the inputs above to enable the balance.";
+      note.textContent = "Field capacity (" + soilCtx.fcPct + "%) must be greater than wilting point (" + soilCtx.wpPct + "%), and root depth must be positive — fix the inputs above to enable the balance.";
       panel.innerHTML = "";
       return;
     }
     note.textContent = "TAW (total available water): " + Math.round(tawRaw.taw) + " mm · RAW (readily available before stress risk): " +
-      Math.round(tawRaw.raw) + " mm, for a " + rootDepthM + " m root zone.";
-    if(!$("soilBalanceEnabled").checked){
+      Math.round(tawRaw.raw) + " mm, for a " + soilCtx.rootDepthM + " m root zone.";
+    if(!soilCtx.enabled){
       panel.innerHTML = "";
       return;
     }
-    var known = DAYS.map(function(_, i){ return typeof dayAt(i).et0 === "number"; });
-    var etMm = DAYS.map(function(_, i){ return known[i] ? dayAt(i).et0 * variety.kc : 0; });
-    var rainMm = DAYS.map(function(_, i){ return (dayAt(i).rainfall || 0) * INFILTRATION; });
+    var known = soilCtx.known, etMm = soilCtx.etMm, rainMm = soilCtx.rainMm;
     var irrigationMm = DAYS.map(function(_, i){ return litersPerTree[i] / effAreaPerTree; });
-    var startDepletion = $("startMoisture").value === "full" ? 0 : tawRaw.raw;
+    var startDepletion = soilCtx.startDepletion;
     var sim = simulateSoilBalance(etMm, rainMm, irrigationMm, known, tawRaw.taw, tawRaw.raw, startDepletion);
 
     var rows = sim.map(function(r, i){
@@ -1774,13 +1789,42 @@
       // Whether the tree actually ends up whole depends on whether the budget/pump constraints,
       // reported below, end up cutting into that redistributed water too — so this only claims
       // "full week" when neither constraint is actually binding this week.
-      var compensationMadeWhole = scale >= 0.999 && !cappedDays.length;
-      parts.push(DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) +
-        " L/tree) isn't lost — half is added to " + DAYS[compensation.beforeIdx] + " so the soil goes into " +
-        "the rest day already moist, and half to " + DAYS[compensation.afterIdx] + " to make up the rest." +
-        (compensationMadeWhole ?
+      var compensationMadeWhole = scale >= 0.999 && !cappedDays.length && compensation.carryoverPerTree < 0.5;
+      var hasBefore = compensation.beforeIdx !== -1, hasAfter = compensation.afterIdx !== -1;
+      var redistSentence;
+      if(hasBefore && hasAfter){
+        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) + " L/tree) isn't lost — " +
+          (compensation.storageAware ?
+            "about " + Math.ceil(compensation.beforeAmount) + " L/tree is advanced onto " + DAYS[compensation.beforeIdx] +
+              " (as much as the soil can actually hold before " + DAYS[restDay] + "), and about " +
+              Math.ceil(compensation.afterAmount) + " L/tree makes up on " + DAYS[compensation.afterIdx] +
+              " whatever that still leaves short." :
+            "half is added to " + DAYS[compensation.beforeIdx] + " so the soil goes into the rest day already moist, " +
+              "and half to " + DAYS[compensation.afterIdx] + " to make up the rest.");
+      } else if(hasBefore){
+        // restDay is the last day shown this week (e.g. Saturday/Shabbat) — there's no "day after"
+        // in THIS view to make up the rest without mislabeling an earlier day as post-rest-day
+        // recovery (see the code comment where beforeIdx/afterIdx are computed). Whatever advance
+        // watering can't cover is disclosed as carryover into next week instead.
+        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) + " L/tree) is" +
+          (compensation.storageAware ? " partly" : "") + " advanced onto " + DAYS[compensation.beforeIdx] +
+          (compensation.storageAware ? " (about " + Math.ceil(compensation.beforeAmount) + " L/tree, as much as the soil can hold)" :
+            " (about " + Math.ceil(compensation.beforeAmount) + " L/tree)") +
+          " — there's no day after " + DAYS[restDay] + " in this week's view to make up the rest without crediting an earlier day for it" +
+          (compensation.carryoverPerTree > 0.5 ? "; about " + Math.ceil(compensation.carryoverPerTree) + " L/tree carries into next week instead." : ".");
+      } else if(hasAfter){
+        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) + " L/tree) is made up on " +
+          DAYS[compensation.afterIdx] + " (about " + Math.ceil(compensation.afterAmount) + " L/tree) — there's no day before " +
+          DAYS[restDay] + " in this week's view to advance-water from.";
+      } else {
+        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) +
+          " L/tree) has no other day in this week's view to redistribute onto.";
+      }
+      parts.push(redistSentence +
+        (hasBefore && hasAfter && compensationMadeWhole ?
           " The tree still gets its full week of water, just not on the rest day." :
-          " Whether that fully makes up for the rest day depends on the budget and pump limits below."));
+          hasBefore && hasAfter ?
+          " Whether that fully makes up for the rest day depends on the budget and pump limits below." : ""));
     } else if(restDay >= 0){
       parts.push(DAYS[restDay] + " wasn't forecast to need water anyway, so nothing needs making up.");
     }
@@ -1934,15 +1978,84 @@
     // rest day itself. Before gets a share so the soil goes into the dry day already moist; after
     // gets a share to make up what the dry day cost. If the rest day would have needed nothing
     // anyway (e.g. it's forecast to rain), there's nothing to redistribute.
+    // beforeIdx/afterIdx are plain index +-1, NOT modulo-7 — restDay=6 (Saturday, the default/
+    // Shabbat case) has no "day after" inside a Sun-start week; that index-0 Sunday already
+    // happened six days earlier, so wrapping around to it and calling it "Saturday's make-up" is
+    // exactly the mislabeled-earlier-Sunday the brief rules out (T19). Same logic the other way
+    // for restDay=0. A day only gets credited if it is actually, chronologically, in this view.
+    var soilCtx = getSoilBalanceContext(variety);
     var compensation = null;
     if(restDay >= 0){
       var restNeed = rawNeedForDay(restDay);
       if(restNeed > 0.01){
-        var beforeIdx = (restDay + 6) % 7, afterIdx = (restDay + 1) % 7;
-        var half = restNeed / 2;
-        raw[beforeIdx] += half;
-        raw[afterIdx] += half;
-        compensation = { restDay: restDay, beforeIdx: beforeIdx, afterIdx: afterIdx, perTree: restNeed };
+        var beforeIdx = restDay - 1, afterIdx = restDay + 1;
+        var beforeInWindow = beforeIdx >= 0, afterInWindow = afterIdx <= 6;
+        compensation = {
+          restDay: restDay, beforeIdx: beforeInWindow ? beforeIdx : -1, afterIdx: afterInWindow ? afterIdx : -1,
+          perTree: restNeed, beforeAmount: 0, afterAmount: 0, storageAware: false, carryoverPerTree: 0
+        };
+
+        var canSimulate = beforeInWindow && soilCtx.enabled && soilCtx.tawRaw.valid && soilCtx.known[restDay] &&
+          soilCtx.known[beforeIdx] && (!afterInWindow || soilCtx.known[afterIdx]);
+
+        if(canSimulate){
+          // Simulate depletion up through the start of beforeIdx using everyone's OWN
+          // (uncompensated) irrigation decision plus real ET/rain, so the advance-watering call
+          // reflects the soil's actual state entering that day, not a guess. Does NOT simulate
+          // past beforeIdx here — afterIdx (if any) is still waiting on the advance amount below.
+          var ownIrrigationMm = raw.map(function(l){ return l / effAreaPerTree; });
+          var preSim = simulateSoilBalance(soilCtx.etMm, soilCtx.rainMm, ownIrrigationMm, soilCtx.known,
+            soilCtx.tawRaw.taw, soilCtx.tawRaw.raw, soilCtx.startDepletion);
+          var depletionAtStartBefore = beforeIdx === 0 ? soilCtx.startDepletion : preSim[beforeIdx].depletionStart;
+          var ownNeedBeforeMm = raw[beforeIdx] / effAreaPerTree;
+          var rainBeforeMm = soilCtx.rainMm[beforeIdx], etBeforeMm = soilCtx.etMm[beforeIdx];
+          var etRestMm = soilCtx.etMm[restDay], rainRestMm = soilCtx.rainMm[restDay];
+
+          // Headroom: how much MORE the bucket can usefully hold on the before-day before it's
+          // already full — advancing past this just drains away unused rather than helping, so the
+          // amount actually applied is capped here, not dumped regardless of storage.
+          var headroomMm = Math.max(0, depletionAtStartBefore - rainBeforeMm - ownNeedBeforeMm);
+          var endBeforeWithoutAdvance = Math.min(soilCtx.tawRaw.taw, headroomMm + etBeforeMm);
+          // Target: how depleted the before-day can end up and still let the rest day close back
+          // at or under RAW using nothing but its own ET/rain, since no irrigation happens on it.
+          var targetBeforeEnd = Math.max(0, soilCtx.tawRaw.raw - etRestMm + rainRestMm);
+          var neededReductionMm = Math.max(0, endBeforeWithoutAdvance - targetBeforeEnd);
+          var advanceMm = Math.min(neededReductionMm, headroomMm);
+
+          raw[beforeIdx] += advanceMm * effAreaPerTree;
+          compensation.beforeAmount = advanceMm * effAreaPerTree;
+          compensation.storageAware = true;
+
+          var endBeforeWithAdvance = Math.min(soilCtx.tawRaw.taw, Math.max(0, headroomMm - advanceMm) + etBeforeMm);
+          var endRest = Math.min(soilCtx.tawRaw.taw, Math.max(0, endBeforeWithAdvance - rainRestMm) + etRestMm);
+          // Make up exactly however far that leaves the bucket past RAW — back to right at the
+          // threshold, not all the way to full, matching the under- rather than over-irrigate bias
+          // used everywhere else in this app.
+          var leftoverMm = Math.max(0, endRest - soilCtx.tawRaw.raw);
+          if(afterInWindow){
+            raw[afterIdx] += leftoverMm * effAreaPerTree;
+            compensation.afterAmount = leftoverMm * effAreaPerTree;
+          } else {
+            // No day after in THIS view (restDay is the last day shown, e.g. Saturday) — report
+            // whatever the advance watering couldn't absorb as carryover into next week rather
+            // than silently dropping it or crediting an earlier day for it.
+            compensation.carryoverPerTree = leftoverMm * effAreaPerTree;
+          }
+        } else {
+          // Flat half/half fallback — no soil-balance data to reason from (disabled, invalid
+          // inputs, or missing ET0 for a day involved), or restDay is the first day shown so there
+          // is no "before" neighbor to advance-water at all. Splits only across whichever
+          // neighbor(s) are actually in this display window; same behavior as before this slice
+          // when neither window edge is involved.
+          var shareCount = (beforeInWindow ? 1 : 0) + (afterInWindow ? 1 : 0);
+          if(shareCount > 0){
+            var share = restNeed / shareCount;
+            if(beforeInWindow){ raw[beforeIdx] += share; compensation.beforeAmount = share; }
+            if(afterInWindow){ raw[afterIdx] += share; compensation.afterAmount = share; }
+          } else {
+            compensation.carryoverPerTree = restNeed;
+          }
+        }
       }
     }
 
@@ -1992,7 +2105,7 @@
     });
 
     $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
-    renderSoilBalance(litersPerTree, effAreaPerTree, variety);
+    renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree);
 
     var soilLabel = $("soil").options[$("soil").selectedIndex].text;
     var printWeekDates = state.weekDates ? state.weekDates.filter(function(d){ return d; }).sort() : [];
@@ -2084,8 +2197,13 @@
         '<td class="num">' + deltaStr + "</td>" +
         "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0) +
           (isTodaySlot(i) && sensor.enabled ? " <em>Adjusted using your sensor reading for today.</em>" : "") +
-          (compensation && isRest ? " <em>That water isn't lost — split between " + DAYS[compensation.beforeIdx] +
-            " and " + DAYS[compensation.afterIdx] + ".</em>" : "") +
+          (compensation && isRest && compensation.beforeIdx !== -1 && compensation.afterIdx !== -1 ?
+            " <em>That water isn't lost — split between " + DAYS[compensation.beforeIdx] + " and " + DAYS[compensation.afterIdx] + ".</em>" :
+           compensation && isRest && compensation.beforeIdx !== -1 ?
+            " <em>That water isn't lost — advanced onto " + DAYS[compensation.beforeIdx] +
+              (compensation.carryoverPerTree > 0.5 ? "; the rest carries into next week (no day after " + DAYS[restDay] + " in this view)." : ".") + "</em>" :
+           compensation && isRest && compensation.afterIdx !== -1 ?
+            " <em>That water isn't lost — made up on " + DAYS[compensation.afterIdx] + ".</em>" : "") +
           (compensation && i === compensation.beforeIdx ? " <em>Includes a top-up for " + DAYS[restDay] + "'s rest day, watered in advance.</em>" : "") +
           (compensation && i === compensation.afterIdx ? " <em>Includes a top-up making up for " + DAYS[restDay] + "'s rest day.</em>" : "") +
           "</td>";
