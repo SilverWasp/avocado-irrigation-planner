@@ -807,6 +807,19 @@
   function $(id){ return document.getElementById(id); }
   function pad2(n){ n = Math.round(n) % 24; if(n < 0) n += 24; return (n < 10 ? "0" : "") + n; }
 
+  // Reads a numeric field without the classic `Number(x) || fallback` bug, where a deliberate 0
+  // (zero budget, zero pump flow, zero available hours — all real, meaningful states) silently
+  // becomes the fallback because 0 is falsy. Only a genuinely blank or non-numeric field falls
+  // back; negative values are invalid for every quantity read this way, so they clamp to 0 rather
+  // than propagating a negative volume.
+  function numOr(id, fallback){
+    var raw = $(id).value;
+    if(raw === "" || raw === null || raw === undefined) return fallback;
+    var n = Number(raw);
+    if(!isFinite(n)) return fallback;
+    return n < 0 ? 0 : n;
+  }
+
   // ---------- Date helpers (local calendar dates, not UTC) ----------
   function isoFromDate(d){
     var y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), day = String(d.getDate()).padStart(2,"0");
@@ -1131,8 +1144,8 @@
   function fetchForecast(){
     var status = $("fetchStatus");
     var btn = $("fetchBtn");
-    var hotThreshold = Number($("hotThreshold").value) || 32;
-    var rainThreshold = Number($("rainThreshold").value) || 1;
+    var hotThreshold = numOr("hotThreshold", 32);
+    var rainThreshold = numOr("rainThreshold", 1);
 
     btn.disabled = true;
     status.className = "fetch-status";
@@ -1233,16 +1246,25 @@
     return { label: best.label, start: best.start, end: best.end, dataBacked: true };
   }
 
+  // The window must always span enough time to actually deliver the allocated volume — it must
+  // never be clamped down to whichever "ideal driest" sub-window pickIrrigationWindow() found, since
+  // that window can be shorter than hoursNeeded (e.g. a 2-hour dry stretch when 4 hours of flow are
+  // needed). Extending the end time is safe here because hoursNeeded can never exceed maxHours: the
+  // volume it's derived from was already capped at flowRate × maxHours before this is called. A
+  // close time at or past 24:00 means the window runs past midnight into the next calendar day.
+  function windowEnd(win, hoursNeeded){
+    return win.start + Math.max(1, hoursNeeded);
+  }
   function formatWindow(win, hoursNeeded){
-    var end = Math.min(win.end, win.start + Math.max(1, hoursNeeded));
-    return pad2(win.start) + ":00–" + pad2(end) + ":00";
+    var end = windowEnd(win, hoursNeeded);
+    return pad2(win.start) + ":00–" + pad2(end) + ":00" + (end >= 24 ? "+1" : "");
   }
 
   // Spelled out for the detail table / printout, so it reads as a literal instruction a farmer
   // can act on — not just a time range to interpret.
   function formatWindowLong(win, hoursNeeded){
-    var end = Math.min(win.end, win.start + Math.max(1, hoursNeeded));
-    return "Open " + pad2(win.start) + ":00 → close " + pad2(end) + ":00";
+    var end = windowEnd(win, hoursNeeded);
+    return "Open " + pad2(win.start) + ":00 → close " + pad2(end) + ":00" + (end >= 24 ? " (next day)" : "");
   }
 
   // ---------- Day cards (forecast input) ----------
@@ -1436,10 +1458,16 @@
       (restDay >= 0 ? ", skipping " + DAYS[restDay] + " (rest day)" : "") + ".");
 
     if(compensation){
+      // Whether the tree actually ends up whole depends on whether the budget/pump constraints,
+      // reported below, end up cutting into that redistributed water too — so this only claims
+      // "full week" when neither constraint is actually binding this week.
+      var compensationMadeWhole = scale >= 0.999 && !cappedDays.length;
       parts.push(DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) +
         " L/tree) isn't lost — half is added to " + DAYS[compensation.beforeIdx] + " so the soil goes into " +
-        "the rest day already moist, and half to " + DAYS[compensation.afterIdx] + " to make up the rest. " +
-        "The tree still gets its full week of water, just not on the rest day.");
+        "the rest day already moist, and half to " + DAYS[compensation.afterIdx] + " to make up the rest." +
+        (compensationMadeWhole ?
+          " The tree still gets its full week of water, just not on the rest day." :
+          " Whether that fully makes up for the rest day depends on the budget and pump limits below."));
     } else if(restDay >= 0){
       parts.push(DAYS[restDay] + " wasn't forecast to need water anyway, so nothing needs making up.");
     }
@@ -1485,8 +1513,8 @@
   }
 
   function render(){
-    var area = Math.max(0.1, Number($("area").value) || 3);
-    var density = Math.max(1, Number($("density").value) || 40);
+    var area = Math.max(0.1, numOr("area", 3));
+    var density = Math.max(1, numOr("density", 40));
     var trees = Math.max(1, Math.round(area * density));
     var areaPerTree = 1000 / density;
     $("treesOut").textContent = trees.toLocaleString();
@@ -1508,13 +1536,17 @@
       "Planted denser than the " + REFERENCE_DENSITY + "/dunam reference, so each tree gets a smaller share as they compete for the same land — total use plateaus rather than rising further." :
       "";
 
-    var baseline = Math.max(1, Number($("baseline").value) || 45);
-    var soilFactor = Number($("soil").value) || 1;
+    var baseline = Math.max(1, numOr("baseline", 45));
+    var soilFactor = numOr("soil", 1);
     var variety = getVariety();
     $("varietyNote").textContent = variety.note;
-    var budget = Math.max(1, Number($("budget").value) || 28000);
-    var flowRate = Math.max(1, Number($("flowRate").value) || 1500);
-    var maxHours = Math.max(0.5, Number($("maxHours").value) || 4);
+    // Budget, flow rate and max hours are deliberately NOT floored to a minimum of 1 the way the
+    // orchard-setup fields above are — zero is a real, meaningful value for all three ("no water
+    // allocated this week," "pump is off," "no hours available today"), not an invalid input that
+    // should silently fall back to the default. Only a blank/non-numeric field falls back.
+    var budget = numOr("budget", 28000);
+    var flowRate = numOr("flowRate", 1500);
+    var maxHours = numOr("maxHours", 4);
     var dailyCap = flowRate * maxHours;
     $("dailyCapOut").textContent = Math.round(dailyCap).toLocaleString();
     var restDay = Number($("restday").value);
@@ -1591,12 +1623,18 @@
       return total;
     });
 
-    // round down everywhere a final amount is shown or totaled — under-watering beats over-watering
+    // Round down everywhere a final amount is shown or totaled — under-watering beats over-watering.
+    // Plot total is derived FROM the already-floored per-tree figure (not floored independently from
+    // its own float), so "35 L/tree × 120 trees" on screen always equals the displayed total exactly
+    // — previously these came from two separately-rounded values and could disagree (e.g. 35 L/tree
+    // shown against a 4,242 L total, when 35×120=4,200).
     var litersPerTree = litersPerTreeFloat.map(Math.floor);
-    var plotTotal = plotTotalFloat.map(Math.floor);
+    var plotTotal = litersPerTree.map(function(l){ return l * trees; });
 
     var weeklyFinal = plotTotal.reduce(function(a,b){ return a+b; }, 0);
-    var pctUsed = (weeklyFinal / budget) * 100;
+    // budget=0 is a real, meaningful state (see numOr above) — weeklyFinal is always 0 too in that
+    // case, so this renders as "0% of 0 L" rather than NaN from a 0/0 division.
+    var pctUsed = budget > 0 ? (weeklyFinal / budget) * 100 : 0;
     var maxLiters = Math.max.apply(null, litersPerTree.concat([1]));
 
     var windows = DAYS.map(function(_, i){
