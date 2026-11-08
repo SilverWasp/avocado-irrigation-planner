@@ -574,6 +574,22 @@
     </div>
     <p class="computed-stat" id="varietyNote"></p>
 
+    <div class="row2">
+      <div class="field">
+        <label for="growthStage">Growth stage</label>
+        <select id="growthStage">
+          <option value="young">Young (just planted)</option>
+          <option value="developing">Developing</option>
+          <option value="mature" selected>Mature</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="canopyCoverage">Actual canopy coverage (%)</label>
+        <input type="number" id="canopyCoverage" value="95" min="5" max="100" step="5">
+      </div>
+    </div>
+    <p class="computed-stat" id="canopyNote">A tree that hasn't filled its canopy footprint yet draws proportionally less water, independent of the land/density reference above. Picking a stage fills in an illustrative coverage (&asymp;50% / 75% / 95%) and a matching root-zone depth for the soil-water balance below — both are editable estimates, not measured figures, so override them if you've actually measured either one. This plan models one uniform zone; if the plot has genuinely mixed ages, plan each age group separately (as its own plot/session) and total the results rather than averaging a stage here.</p>
+
     <div class="field">
       <label for="baseline">Baseline L / tree on a mild day (ET<sub>c</sub> estimate, for this variety)</label>
       <input type="number" id="baseline" value="45" min="1" step="1">
@@ -848,6 +864,16 @@
   };
   function getVariety(){ return VARIETIES[$("variety").value] || VARIETIES.hass; }
 
+  // Illustrative canopy-coverage and root-depth presets per growth stage (brief: "approximately
+  // 50%, 75% and 95%... treat these as illustrative labels, not validated coefficients"). Applied
+  // once when the stage is picked, not re-applied on every render — both fields stay editable
+  // afterward, same as every other preset-but-overridable input in this app.
+  var GROWTH_STAGE_PRESETS = {
+    young:      { coverage: 50, rootDepth: 0.3 },
+    developing: { coverage: 75, rootDepth: 0.45 },
+    mature:     { coverage: 95, rootDepth: 0.6 }
+  };
+
   // Instant, zero-network soil default, built from known regional soil surveys plus a coarse,
   // well-documented global pattern (desert belts are sandy, Mediterranean-climate belts run
   // clay-loam, equatorial rainforest belts run clay). This is deliberately the PRIMARY source,
@@ -1002,7 +1028,8 @@
   // Every plot/hardware/soil-balance input that should survive a reload. Checkboxes are listed
   // separately since they're read/written via `.checked`, not `.value`.
   var FIELD_INPUT_IDS = ["area","density","variety","baseline","soil","budget","emitterFlow","pumpCapacity",
-    "maxHours","efficiency","restday","fieldCapacity","wiltingPoint","rootDepth","depletionFraction","startMoisture"];
+    "maxHours","efficiency","restday","fieldCapacity","wiltingPoint","rootDepth","depletionFraction","startMoisture",
+    "growthStage","canopyCoverage"];
   var FIELD_CHECKBOX_IDS = ["soilBalanceEnabled"];
 
   // Writes the CURRENT DOM values for all of the above into state.fields and persists them. Called
@@ -1739,11 +1766,13 @@
       "</p>");
 
     parts.push("<p><strong>Per-tree water need.</strong> For a day with real ET&#8320; (Open-Meteo's reference evapotranspiration): " +
-      "<code>need = ET&#8320; &times; kc &times; soilFactor &times; effAreaPerTree</code> — currently kc " + ctx.variety.kc.toFixed(2) +
-      " (" + ctx.variety.name + "), soilFactor " + ctx.soilFactor.toFixed(2) + ", effAreaPerTree " + Math.round(ctx.effAreaPerTree) +
-      " m&sup2;. For a day with no live ET&#8320; (manual/assignment): <code>need = baseline &times; heatFactor(if hot) &times; soilFactor &times; waterFactor &times; densityFactor</code> — " +
+      "<code>need = ET&#8320; &times; kc &times; soilFactor &times; canopyFactor &times; effAreaPerTree</code> — currently kc " + ctx.variety.kc.toFixed(2) +
+      " (" + ctx.variety.name + "), soilFactor " + ctx.soilFactor.toFixed(2) + ", canopyFactor " + ctx.canopyFactor.toFixed(2) + " (" +
+      ctx.canopyCoverage + "% coverage, " + ctx.growthStage + "), effAreaPerTree " + Math.round(ctx.effAreaPerTree) +
+      " m&sup2;. For a day with no live ET&#8320; (manual/assignment): <code>need = baseline &times; heatFactor(if hot) &times; soilFactor &times; waterFactor &times; canopyFactor &times; densityFactor</code> — " +
       "currently baseline " + ctx.baseline + " L/tree, heatFactor " + ctx.variety.heatFactor.toFixed(2) + " on a hot day, waterFactor " +
-      ctx.variety.waterFactor.toFixed(2) + ", densityFactor " + ctx.densityFactor.toFixed(2) + ". Both paths then subtract rainfall credit " +
+      ctx.variety.waterFactor.toFixed(2) + ", densityFactor " + ctx.densityFactor.toFixed(2) + ". A real sensor reading for today (if used) replaces " +
+      "this whole formula outright rather than being scaled by any of the above, canopyFactor included. Both modeled paths then subtract rainfall credit " +
       "(<code>rain_mm &times; effAreaPerTree &times; " + INFILTRATION + "</code> — " + Math.round(INFILTRATION * 100) +
       "% of rainfall assumed to reach the root zone), floored at zero, then divide by system efficiency (<code>net &divide; efficiency</code>) " +
       "for the GROSS, pump-side figure used everywhere downstream — currently &divide; " + ctx.efficiencyPct + "%.</p>");
@@ -2124,6 +2153,12 @@
     var soilFactor = numOr("soil", 1);
     var variety = getVariety();
     $("varietyNote").textContent = variety.note;
+    // A tree that hasn't filled its canopy footprint yet draws proportionally less water — a
+    // different concept from the land/density reference above (effAreaPerTree), which is about
+    // competition for space, not how developed any one tree's own canopy actually is. Illustrative
+    // labels only (the brief is explicit these aren't validated coefficients), editable here.
+    var canopyCoverage = Math.min(100, Math.max(5, numOr("canopyCoverage", 95)));
+    var canopyFactor = canopyCoverage / 100;
     // Budget, flow rate and max hours are deliberately NOT floored to a minimum of 1 the way the
     // orchard-setup fields above are — zero is a real, meaningful value for all three ("no water
     // allocated this week," "pump is off," "no hours available today"), not an invalid input that
@@ -2164,19 +2199,21 @@
       var etNeed;
       if(isTodaySlot(i) && sensor.enabled && sensor.etVal != null){
         // A real field measurement for today — already reflects actual soil and weather as observed,
-        // so it replaces everything else outright rather than being scaled further.
+        // so it replaces everything else outright rather than being scaled further (canopy coverage
+        // included — a direct reading already carries whatever this tree's current canopy is doing).
         etNeed = sensor.etVal * effAreaPerTree;
       } else if(typeof rec.et0 === "number"){
         // Real FAO-56 reference evapotranspiration for this day: Open-Meteo derives it from actual
         // temperature, solar radiation (so a cloudy day pulls this down on its own), humidity and
         // wind — far more accurate than guessing from a hot/normal label. The crop coefficient (kc)
         // converts that atmospheric figure into this variety's actual water use; soilFactor still
-        // approximates how much of it the soil holds onto.
-        etNeed = rec.et0 * variety.kc * soilFactor * effAreaPerTree;
+        // approximates how much of it the soil holds onto, canopyFactor how much of that a tree
+        // that hasn't filled its canopy footprint yet actually draws.
+        etNeed = rec.et0 * variety.kc * soilFactor * canopyFactor * effAreaPerTree;
       } else {
         // No live data for this day (manual entry, or never pulled) — fall back to the hand-set
         // baseline and the coarser hot/normal guess.
-        etNeed = baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor * densityFactor;
+        etNeed = baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor * canopyFactor * densityFactor;
       }
       // Any recorded rainfall counts, not just days labeled "Rainy" — a sub-threshold
       // drizzle on a "Normal" day still reduces how much needs to be irrigated.
@@ -2343,6 +2380,7 @@
       mode: state.mode, source: state.source,
       area: area, density: density, trees: trees, REFERENCE_DENSITY: REFERENCE_DENSITY, effAreaPerTree: effAreaPerTree, densityFactor: densityFactor,
       baseline: baseline, soilFactor: soilFactor, variety: variety,
+      canopyCoverage: canopyCoverage, canopyFactor: canopyFactor, growthStage: $("growthStage").value,
       budget: budget, emitterFlow: emitterFlow, pumpCapacity: pumpCapacity, maxHours: maxHours, efficiency: efficiency, efficiencyPct: efficiencyPct,
       zoneDemandFlow: zoneDemandFlow, wholePlotFeasible: wholePlotFeasible, effectiveFlow: effectiveFlow, dailyCap: dailyCap,
       restDay: restDay, compensation: compensation, rawWeeklyTotal: rawWeeklyTotal, scale: scale,
@@ -2531,6 +2569,8 @@
     $("baseline").value = 45;
     $("soil").value = "0.85";
     $("budget").value = 28000;
+    $("growthStage").value = "mature";
+    $("canopyCoverage").value = 95;
     $("emitterFlow").value = 12.5;
     $("pumpCapacity").value = 1500;
     $("maxHours").value = 4;
@@ -2549,12 +2589,23 @@
   }
 
   ["area","density","variety","baseline","soil","budget","emitterFlow","pumpCapacity","maxHours","efficiency","restday",
-   "fieldCapacity","wiltingPoint","rootDepth","depletionFraction"].forEach(function(id){
+   "fieldCapacity","wiltingPoint","rootDepth","depletionFraction","canopyCoverage"].forEach(function(id){
     $(id).addEventListener("input", render);
     $(id).addEventListener("change", render);
   });
   ["soilBalanceEnabled","startMoisture"].forEach(function(id){
     $(id).addEventListener("change", render);
+  });
+  // Picking a stage applies its illustrative coverage/root-depth preset once, right then — not
+  // re-applied on every render, so hand-editing either field afterward sticks instead of being
+  // silently overwritten back to the preset on the next recalculation.
+  $("growthStage").addEventListener("change", function(){
+    var preset = GROWTH_STAGE_PRESETS[$("growthStage").value];
+    if(preset){
+      $("canopyCoverage").value = preset.coverage;
+      $("rootDepth").value = preset.rootDepth;
+    }
+    render();
   });
   $("copyBtn").addEventListener("click", copySchedule);
   $("printBtn").addEventListener("click", function(){ window.print(); });
