@@ -996,15 +996,50 @@
     if(!skipPull) pullLocationData();
   }
 
+  // Raw tile.openstreetmap.org enforces a strict usage policy and will 403 traffic it judges too
+  // heavy for a single casual app — exactly the pattern repeated dev/testing reloads produce. (CARTO's
+  // basemap was tried as a replacement but, as of this writing, its anonymous/keyless tier serves a
+  // small watermark placeholder instead of real tiles — confirmed directly, not assumed — so it's not
+  // usable here.) Esri's World Street Map tiles are genuinely free and keyless for this kind of light
+  // use, so they're primary; raw OSM is the fallback. Two-entry list so a failure on one switches to
+  // the other automatically. Note Esri's tile URLs are z/y/x, not the usual z/x/y — intentional below.
+  var TILE_PROVIDERS = [
+    {
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+      options: { maxZoom: 19, attribution: "Tiles &copy; Esri" }
+    },
+    {
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      options: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }
+    }
+  ];
+
   function initMap(){
     try{
       if(typeof L === "undefined") throw new Error("Leaflet didn't load");
       // Touch pinch-zoom is on by Leaflet's own default; scroll-wheel zoom is opted in explicitly here.
       map = L.map("map", { scrollWheelZoom: true, touchZoom: true }).setView([state.lat, state.lon], 9);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(map);
+
+      var providerIdx = 0;
+      var tileErrorCount = 0;
+      var activeLayer = null;
+      function useProvider(idx){
+        var p = TILE_PROVIDERS[idx];
+        if(activeLayer) map.removeLayer(activeLayer);
+        tileErrorCount = 0;
+        activeLayer = L.tileLayer(p.url, p.options).addTo(map);
+        activeLayer.on("tileerror", function(){
+          tileErrorCount++;
+          // A handful of failed tiles can just be a flaky edge tile; a burst of them means this
+          // provider itself is down or blocking us — switch to the next one automatically.
+          if(tileErrorCount >= 6 && providerIdx < TILE_PROVIDERS.length - 1){
+            providerIdx++;
+            useProvider(providerIdx);
+          }
+        });
+      }
+      useProvider(providerIdx);
+
       marker = L.marker([state.lat, state.lon], { draggable: true }).addTo(map);
       map.on("click", function(e){ setLocation(e.latlng.lat, e.latlng.lng); });
       marker.on("dragend", function(){
