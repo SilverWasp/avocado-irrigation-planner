@@ -495,6 +495,50 @@
     <p id="soilStatus" class="fetch-status">Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.</p>
   </div>
 
+  <details class="panel no-print" style="margin-bottom:14px;">
+    <summary>
+      <span>
+        <p class="eyebrow">Advanced, optional</p>
+        <h2>Soil-water balance (TAW / RAW)</h2>
+      </span>
+    </summary>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;">
+      Tracks a root-zone "bucket" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>Diagnostic only for now:</strong> it reports the risk this week's schedule leaves behind; it does not yet change the schedule itself. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — days without it show as not simulated. Defaults below are generic textbook midpoints (<a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.
+    </p>
+    <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin-bottom:10px;">
+      <input type="checkbox" id="soilBalanceEnabled"> Enable soil-water balance tracking
+    </label>
+    <div class="row2">
+      <div class="field">
+        <label for="fieldCapacity">Field capacity (% vol.)</label>
+        <input type="number" id="fieldCapacity" value="32" min="1" max="100" step="1">
+      </div>
+      <div class="field">
+        <label for="wiltingPoint">Wilting point (% vol.)</label>
+        <input type="number" id="wiltingPoint" value="17" min="0" max="99" step="1">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="rootDepth">Effective root depth (m)</label>
+        <input type="number" id="rootDepth" value="0.6" min="0.1" step="0.1">
+      </div>
+      <div class="field">
+        <label for="depletionFraction">Allowed depletion (% of TAW)</label>
+        <input type="number" id="depletionFraction" value="35" min="1" max="100" step="1">
+      </div>
+    </div>
+    <div class="field">
+      <label for="startMoisture">Start-of-week soil moisture</label>
+      <select id="startMoisture">
+        <option value="raw" selected>Unknown — assume right at the refill threshold (depletion = RAW)</option>
+        <option value="full">Assume full (just irrigated/rained to field capacity)</option>
+      </select>
+    </div>
+    <p class="computed-stat" id="tawRawNote"></p>
+    <div id="soilBalancePanel"></div>
+  </details>
+
   <details class="panel no-print" open style="margin-bottom:14px;">
     <summary>
       <span class="step-num">2</span>
@@ -1405,6 +1449,118 @@
       (end >= 24 ? " (next day)" : "") + " (" + formatDuration(hoursNeeded) + ")";
   }
 
+  // ---------- Soil-water balance (TAW/RAW, diagnostic — brief section 6) ----------
+  // A pure bucket model: field capacity / wilting point / root depth give total and readily
+  // available water (mm); FC must exceed WP or the depth math is nonsensical (T16). Kept separate
+  // from the rendering below so the arithmetic itself is easy to hand-verify.
+  function computeTAWRAW(fcPct, wpPct, rootDepthM, depletionFractionPct){
+    if(!isFinite(fcPct) || !isFinite(wpPct) || !(fcPct > wpPct) || !(rootDepthM > 0)){
+      return { valid: false, taw: 0, raw: 0 };
+    }
+    // Subtract the percentages BEFORE dividing by 100, not after: fcPct/100 - wpPct/100 (e.g.
+    // 0.32 - 0.17) hits ordinary binary floating-point error and lands a hair under the true
+    // 0.15, which then rounds RAW down a whole mm off downstream. 1000 * (fc-wp) * depth is
+    // algebraically 10 * (fcPct-wpPct) * depth, and integer-percent subtraction is exact.
+    var taw = 10 * (fcPct - wpPct) * rootDepthM; // mm
+    var raw = (depletionFractionPct / 100) * taw;
+    // Both figures get displayed and compared against (stress risk, T16/T17); round off the last
+    // few binary-floating-point digits of noise (e.g. 0.35*90 landing on 31.499999999999996
+    // instead of 31.5) so neither a display nor a >raw comparison is thrown off by it.
+    return { valid: true, taw: Math.round(taw * 1000) / 1000, raw: Math.round(raw * 1000) / 1000 };
+  }
+
+  // Walks the week day by day carrying depletion (mm) forward: rain/irrigation refill the bucket,
+  // ET drains it, and both ends are clamped — refilling past full (depletion 0) runs off as
+  // drainage rather than going negative or vanishing, and ET can never push depletion past TAW
+  // (the bucket being physically empty). etMm/rainMm/irrigationMm are all depth-equivalent for one
+  // tree's reference area, so they're directly comparable to TAW/RAW regardless of tree count.
+  // `known[i]` marks whether day i has real ET0-backed data; an unmeasured day is reported as such
+  // rather than guessed into the trajectory. This is diagnostic only: it reports the stress risk
+  // the ALREADY-DECIDED schedule leaves behind, it does not yet feed back into deciding that
+  // schedule (see the soil-water balance panel's own disclosure in the UI).
+  function simulateSoilBalance(etMm, rainMm, irrigationMm, known, taw, raw, startDepletion){
+    var depletion = startDepletion;
+    return etMm.map(function(et, i){
+      var start = depletion;
+      if(!known[i]){
+        return { day: i, known: false, depletionStart: start, depletionEnd: start, etMm: 0, rainCredit: 0, irrigationMm: 0, drainageMm: 0, stress: null };
+      }
+      var afterRefill = start - rainMm[i] - irrigationMm[i];
+      var drainage = afterRefill < 0 ? -afterRefill : 0;
+      var end = Math.min(Math.max(0, afterRefill) + et, taw);
+      depletion = end;
+      return {
+        day: i, known: true, depletionStart: start, depletionEnd: end,
+        etMm: et, rainCredit: rainMm[i], irrigationMm: irrigationMm[i], drainageMm: drainage,
+        stress: end > raw
+      };
+    });
+  }
+
+  // Reads the soil-water balance inputs, validates them, and renders both the TAW/RAW note and the
+  // (optional) per-day diagnostic table. litersPerTree/effAreaPerTree/variety/restDay come from the
+  // same render() pass that already decided the schedule, so the irrigation column reflects exactly
+  // what the plan above delivers, not a separate guess.
+  function renderSoilBalance(litersPerTree, effAreaPerTree, variety){
+    var fcPct = numOr("fieldCapacity", 32), wpPct = numOr("wiltingPoint", 17);
+    var rootDepthM = numOr("rootDepth", 0.6), depletionPct = numOr("depletionFraction", 35);
+    var tawRaw = computeTAWRAW(fcPct, wpPct, rootDepthM, depletionPct);
+    var note = $("tawRawNote"), panel = $("soilBalancePanel");
+    if(!tawRaw.valid){
+      note.textContent = "Field capacity (" + fcPct + "%) must be greater than wilting point (" + wpPct + "%), and root depth must be positive — fix the inputs above to enable the balance.";
+      panel.innerHTML = "";
+      return;
+    }
+    note.textContent = "TAW (total available water): " + Math.round(tawRaw.taw) + " mm · RAW (readily available before stress risk): " +
+      Math.round(tawRaw.raw) + " mm, for a " + rootDepthM + " m root zone.";
+    if(!$("soilBalanceEnabled").checked){
+      panel.innerHTML = "";
+      return;
+    }
+    var known = DAYS.map(function(_, i){ return typeof dayAt(i).et0 === "number"; });
+    var etMm = DAYS.map(function(_, i){ return known[i] ? dayAt(i).et0 * variety.kc : 0; });
+    var rainMm = DAYS.map(function(_, i){ return (dayAt(i).rainfall || 0) * INFILTRATION; });
+    var irrigationMm = DAYS.map(function(_, i){ return litersPerTree[i] / effAreaPerTree; });
+    var startDepletion = $("startMoisture").value === "full" ? 0 : tawRaw.raw;
+    var sim = simulateSoilBalance(etMm, rainMm, irrigationMm, known, tawRaw.taw, tawRaw.raw, startDepletion);
+
+    var rows = sim.map(function(r, i){
+      var dateLabel = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : "";
+      var label = DAYS[i] + (dateLabel ? " (" + dateLabel + ")" : "");
+      if(!r.known){
+        return "<tr><td>" + label + "</td><td colspan=\"6\" style=\"color:var(--muted);\">Not simulated — no live ET&#8320; for this day yet.</td></tr>";
+      }
+      // Round every input cell first, then DERIVE the displayed end from those same rounded
+      // numbers (not from the true unrounded end) — otherwise a reader doing "17 - 0 - 1 + 2" by
+      // hand gets 18 while the row shows 17, the exact independent-rounding mismatch already
+      // fixed once for litersPerTree/plotTotal. The true float state still carries forward
+      // unrounded between days, so this only affects what this one row displays.
+      var dStart = Math.round(r.depletionStart), dRain = Math.round(r.rainCredit),
+          dIrrigation = Math.round(r.irrigationMm), dEt = Math.round(r.etMm);
+      var dAfterRefill = dStart - dRain - dIrrigation;
+      var dDrainage = dAfterRefill < 0 ? -dAfterRefill : 0;
+      var dEnd = Math.min(Math.max(0, dAfterRefill) + dEt, Math.round(tawRaw.taw));
+      var riskLabel = (dEnd > Math.round(tawRaw.raw)) ? "<strong style=\"color:#b5460a;\">Yes — past RAW</strong>" : "No";
+      return "<tr><td>" + label + "</td>" +
+        "<td class=\"num\">" + dStart + "</td>" +
+        "<td class=\"num\">" + dRain + "</td>" +
+        "<td class=\"num\">" + dIrrigation + "</td>" +
+        "<td class=\"num\">" + dEt + "</td>" +
+        "<td class=\"num\">" + dDrainage + "</td>" +
+        "<td class=\"num\">" + dEnd + "</td>" +
+        "<td>" + riskLabel + "</td></tr>";
+    }).join("");
+
+    panel.innerHTML =
+      '<div class="tableScroll" style="margin-top:10px;">' +
+      '<table><thead><tr><th>Day</th><th class="num">Depletion start (mm)</th><th class="num">Rain credit (mm)</th>' +
+      '<th class="num">Irrigation (mm)</th><th class="num">ET (mm)</th><th class="num">Drainage (mm)</th>' +
+      '<th class="num">Depletion end (mm)</th><th>Stress risk</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p style="font-size:0.78rem;color:var(--muted);margin-top:6px;">Depletion end is how dry the root-zone bucket is at day close (0 = full, ' +
+      Math.round(tawRaw.taw) + ' mm = empty). Stress risk means depletion crossed RAW (' + Math.round(tawRaw.raw) +
+      ' mm) — this reports what the schedule above already does to the soil; it does not change that schedule.</p>';
+  }
+
   // ---------- Day cards (forecast input) ----------
   function buildDayCards(){
     var el = $("dayCards");
@@ -1836,6 +1992,7 @@
     });
 
     $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
+    renderSoilBalance(litersPerTree, effAreaPerTree, variety);
 
     var soilLabel = $("soil").options[$("soil").selectedIndex].text;
     var printWeekDates = state.weekDates ? state.weekDates.filter(function(d){ return d; }).sort() : [];
@@ -2019,14 +2176,24 @@
     $("maxHours").value = 4;
     $("efficiency").value = 90;
     $("restday").value = "6";
+    $("fieldCapacity").value = 32;
+    $("wiltingPoint").value = 17;
+    $("rootDepth").value = 0.6;
+    $("depletionFraction").value = 35;
+    $("soilBalanceEnabled").checked = false;
+    $("startMoisture").value = "raw";
     setLocation(DEFAULT_LAT, DEFAULT_LON, true);
     if(map) map.setView([DEFAULT_LAT, DEFAULT_LON], 9);
     setMode("assignment"); // rebuilds the dated 2-hot/1-rainy/4-normal week, sets source=manual, re-renders
     buildRefCards();
   }
 
-  ["area","density","variety","baseline","soil","budget","emitterFlow","pumpCapacity","maxHours","efficiency","restday"].forEach(function(id){
+  ["area","density","variety","baseline","soil","budget","emitterFlow","pumpCapacity","maxHours","efficiency","restday",
+   "fieldCapacity","wiltingPoint","rootDepth","depletionFraction"].forEach(function(id){
     $(id).addEventListener("input", render);
+    $(id).addEventListener("change", render);
+  });
+  ["soilBalanceEnabled","startMoisture"].forEach(function(id){
     $(id).addEventListener("change", render);
   });
   $("copyBtn").addEventListener("click", copySchedule);
