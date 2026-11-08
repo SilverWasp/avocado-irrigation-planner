@@ -542,15 +542,26 @@
 
     <div class="row2">
       <div class="field">
-        <label for="flowRate">Pump flow rate (L / hour)</label>
-        <input type="number" id="flowRate" value="1500" min="1" step="50">
+        <label for="emitterFlow">Emitter flow per tree (L / hour)</label>
+        <input type="number" id="emitterFlow" value="12.5" min="0" step="0.5">
       </div>
       <div class="field">
-        <label for="maxHours">Max irrigation hours / day</label>
-        <input type="number" id="maxHours" value="4" min="1" step="0.5">
+        <label for="pumpCapacity">Pump capacity (L / hour)</label>
+        <input type="number" id="pumpCapacity" value="1500" min="0" step="50">
       </div>
     </div>
-    <p class="computed-stat">= <strong id="dailyCapOut">6,000</strong> L/day ceiling from the pump</p>
+    <div class="row2">
+      <div class="field">
+        <label for="maxHours">Max irrigation hours / day</label>
+        <input type="number" id="maxHours" value="4" min="0" step="0.5">
+      </div>
+      <div class="field">
+        <label for="efficiency">System efficiency (%)</label>
+        <input type="number" id="efficiency" value="90" min="1" max="100" step="1">
+      </div>
+    </div>
+    <p class="computed-stat" id="feasibilityNote"></p>
+    <p class="computed-stat">= <strong id="dailyCapOut">6,000</strong> L/day ceiling, delivered at <strong id="effectiveFlowOut">1,500</strong> L/h</p>
 
     <div class="field">
       <label for="restday">Rest day — no irrigation</label>
@@ -818,7 +829,6 @@
   }
 
   function $(id){ return document.getElementById(id); }
-  function pad2(n){ n = Math.round(n) % 24; if(n < 0) n += 24; return (n < 10 ? "0" : "") + n; }
 
   // Reads a numeric field without the classic `Number(x) || fallback` bug, where a deliberate 0
   // (zero budget, zero pump flow, zero available hours — all real, meaningful states) silently
@@ -1332,7 +1342,7 @@
   }
 
   // ---------- Irrigation timing ----------
-  function pickIrrigationWindow(hourlyArr){
+  function pickIrrigationWindow(hourlyArr, hoursNeeded, mustFinishByMidnight){
     if(!hourlyArr){
       return { label: "early morning (default)", start: 5, end: 7, dataBacked: false };
     }
@@ -1348,7 +1358,13 @@
     ];
     opts.forEach(function(o){ o.avg = avg(o.start, o.end); });
     opts.sort(function(a, b){ return a.avg - b.avg; });
-    var best = opts[0];
+    // The day right before a rest day must not let irrigation run past midnight into the rest day's
+    // own calendar date — a Friday-night start that keeps flowing past 24:00 is watering on Saturday
+    // in substance even though it began on Friday (brief T04). Drop any candidate window whose end,
+    // given how long this day's volume will actually take, would cross that boundary.
+    var needed = Math.max(hoursNeeded || 0, 1/60);
+    var safeOpts = mustFinishByMidnight ? opts.filter(function(o){ return o.start + needed <= 24; }) : opts;
+    var best = (safeOpts.length ? safeOpts : opts)[0];
     return { label: best.label, start: best.start, end: best.end, dataBacked: true };
   }
 
@@ -1356,21 +1372,37 @@
   // never be clamped down to whichever "ideal driest" sub-window pickIrrigationWindow() found, since
   // that window can be shorter than hoursNeeded (e.g. a 2-hour dry stretch when 4 hours of flow are
   // needed). Extending the end time is safe here because hoursNeeded can never exceed maxHours: the
-  // volume it's derived from was already capped at flowRate × maxHours before this is called. A
-  // close time at or past 24:00 means the window runs past midnight into the next calendar day.
+  // volume it's derived from was already capped at effectiveFlow x maxHours before this is called.
+  // hoursNeeded is a fractional hour count (minute precision), never rounded up to a whole hour — a
+  // 3.6-hour requirement is shown and scheduled as 3h36m, not rounded to 4h.
   function windowEnd(win, hoursNeeded){
-    return win.start + Math.max(1, hoursNeeded);
+    return win.start + Math.max(hoursNeeded, 1/60);
+  }
+  // Formats a fractional-hour clock position as HH:MM, wrapping past 24:00 into the next day.
+  function formatClock(hoursFloat){
+    var totalMin = Math.round(hoursFloat * 60);
+    var h = Math.floor(totalMin / 60) % 24;
+    if(h < 0) h += 24;
+    var m = totalMin % 60;
+    if(m < 0) m += 60;
+    return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+  }
+  function formatDuration(hoursNeeded){
+    var totalMin = Math.round(hoursNeeded * 60);
+    var h = Math.floor(totalMin / 60), m = totalMin % 60;
+    return h > 0 ? (h + "h" + (m > 0 ? " " + m + "m" : "")) : (m + "m");
   }
   function formatWindow(win, hoursNeeded){
     var end = windowEnd(win, hoursNeeded);
-    return pad2(win.start) + ":00–" + pad2(end) + ":00" + (end >= 24 ? "+1" : "");
+    return formatClock(win.start) + "–" + formatClock(end) + (end >= 24 ? "+1" : "");
   }
 
   // Spelled out for the detail table / printout, so it reads as a literal instruction a farmer
   // can act on — not just a time range to interpret.
   function formatWindowLong(win, hoursNeeded){
     var end = windowEnd(win, hoursNeeded);
-    return "Open " + pad2(win.start) + ":00 → close " + pad2(end) + ":00" + (end >= 24 ? " (next day)" : "");
+    return "Open " + formatClock(win.start) + " → close " + formatClock(end) +
+      (end >= 24 ? " (next day)" : "") + " (" + formatDuration(hoursNeeded) + ")";
   }
 
   // ---------- Day cards (forecast input) ----------
@@ -1670,9 +1702,29 @@
     // allocated this week," "pump is off," "no hours available today"), not an invalid input that
     // should silently fall back to the default. Only a blank/non-numeric field falls back.
     var budget = numOr("budget", 28000);
-    var flowRate = numOr("flowRate", 1500);
+    var emitterFlow = numOr("emitterFlow", 12.5); // L/h, PER TREE — what the hardware can deliver to one tree
+    var pumpCapacity = numOr("pumpCapacity", 1500); // L/h — what the pump can physically push, total
     var maxHours = numOr("maxHours", 4);
-    var dailyCap = flowRate * maxHours;
+    var efficiencyPct = Math.max(1, numOr("efficiency", 90)); // 0% would make every gross figure infinite
+    var efficiency = efficiencyPct / 100;
+
+    // Watering every tree at once needs trees x emitterFlow L/h. If that's more than the pump can
+    // physically supply, running the whole plot simultaneously is infeasible — not a soft warning,
+    // a hard fact about the hardware. This doesn't silently invent valves/zones to fix it; it reports
+    // the mismatch and schedules at the rate the pump can actually sustain, which under-delivers
+    // relative to the "all trees at once" ideal (consistent with under- rather over-promising).
+    var zoneDemandFlow = trees * emitterFlow;
+    var wholePlotFeasible = pumpCapacity <= 0 ? zoneDemandFlow <= 0 : zoneDemandFlow <= pumpCapacity;
+    var effectiveFlow = pumpCapacity > 0 ? Math.min(zoneDemandFlow, pumpCapacity) : 0;
+    $("feasibilityNote").textContent = wholePlotFeasible ?
+      "Watering all " + trees.toLocaleString() + " trees at once needs " + Math.round(zoneDemandFlow).toLocaleString() +
+        " L/h — within the pump's " + pumpCapacity.toLocaleString() + " L/h capacity." :
+      "Watering all " + trees.toLocaleString() + " trees at once would need " + Math.round(zoneDemandFlow).toLocaleString() +
+        " L/h, but the pump only supplies " + pumpCapacity.toLocaleString() + " L/h — whole-plot operation isn't feasible. " +
+        "This plan schedules at the pump's actual rate, which means it takes longer (or delivers less) than running everything " +
+        "at once would; splitting into roughly " + Math.ceil(zoneDemandFlow / Math.max(1, pumpCapacity)) + " sequential zones would close that gap, but no zones are configured here.";
+    $("effectiveFlowOut").textContent = Math.round(effectiveFlow).toLocaleString();
+    var dailyCap = effectiveFlow * maxHours;
     $("dailyCapOut").textContent = Math.round(dailyCap).toLocaleString();
     var restDay = Number($("restday").value);
 
@@ -1711,7 +1763,12 @@
         var moistureFactor = Math.max(0, 1 - (sensor.moistureVal / effectiveFieldCapacity));
         need = need * moistureFactor;
       }
-      return need;
+      // Rain and soil moisture already credit water that reached the root zone directly, but what
+      // the system itself must deliver is larger than the plant's net need — drip/sprinkler losses
+      // (wind drift, uneven wetting, leaks) mean only a fraction of what's pumped actually lands
+      // where it's needed. Divide by efficiency here so every downstream number (per-tree liters,
+      // plot totals, hours, budget scaling) is already the gross, pump-side figure.
+      return need / efficiency;
     }
 
     var raw = DAYS.map(function(_, i){ return i === restDay ? 0 : rawNeedForDay(i); });
@@ -1763,13 +1820,19 @@
     var pctUsed = budget > 0 ? (weeklyFinal / budget) * 100 : 0;
     var maxLiters = Math.max.apply(null, litersPerTree.concat([1]));
 
+    // Fractional hours (minute precision) — never ceil'd to a whole hour. plotTotal[i] can never
+    // exceed dailyCap (effectiveFlow x maxHours), so this can never exceed maxHours either. Computed
+    // before windows below, since the midnight-crossing guard (T04) needs to know how long a window
+    // must last before it can tell whether a given start time would run past the rest day's boundary.
+    var hoursNeeded = DAYS.map(function(_, i){
+      return plotTotal[i] > 0 && effectiveFlow > 0 ? plotTotal[i] / effectiveFlow : 0;
+    });
+
+    var dayBeforeRest = restDay >= 0 ? (restDay + 6) % 7 : -1;
     var windows = DAYS.map(function(_, i){
       if(i === restDay || litersPerTree[i] <= 0) return null;
       var hourlyArr = state.weekDates && state.weekDates[i] && state.hourlyByDate ? state.hourlyByDate[state.weekDates[i]] : null;
-      return pickIrrigationWindow(hourlyArr);
-    });
-    var hoursNeeded = DAYS.map(function(_, i){
-      return plotTotal[i] > 0 ? Math.max(1, Math.ceil(plotTotal[i] / flowRate)) : 0;
+      return pickIrrigationWindow(hourlyArr, hoursNeeded[i], i === dayBeforeRest);
     });
 
     $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
@@ -1785,7 +1848,7 @@
         "<div>Soil: " + soilLabel + "</div>" +
         "<div>Trees: " + trees.toLocaleString() + " (" + $("area").value + " dunam, " + $("density").value + "/dunam)</div>" +
         "<div>Weekly budget: " + budget.toLocaleString() + " L</div>" +
-        "<div>Pump: " + flowRate.toLocaleString() + " L/h, max " + maxHours + " h/day</div>" +
+        "<div>Pump: " + pumpCapacity.toLocaleString() + " L/h capacity, " + Math.round(emitterFlow*10)/10 + " L/h/tree emitters, max " + maxHours + " h/day, " + efficiencyPct + "% efficient</div>" +
         "<div>Rest day: " + (restDay >= 0 ? DAYS[restDay] : "none") + "</div>" +
         "<div>Water used this week: " + weeklyFinal.toLocaleString() + " L (" + pctUsed.toFixed(0) + "% of budget)</div>" +
       "</div>";
@@ -1951,8 +2014,10 @@
     $("baseline").value = 45;
     $("soil").value = "0.85";
     $("budget").value = 28000;
-    $("flowRate").value = 1500;
+    $("emitterFlow").value = 12.5;
+    $("pumpCapacity").value = 1500;
     $("maxHours").value = 4;
+    $("efficiency").value = 90;
     $("restday").value = "6";
     setLocation(DEFAULT_LAT, DEFAULT_LON, true);
     if(map) map.setView([DEFAULT_LAT, DEFAULT_LON], 9);
@@ -1960,7 +2025,7 @@
     buildRefCards();
   }
 
-  ["area","density","variety","baseline","soil","budget","flowRate","maxHours","restday"].forEach(function(id){
+  ["area","density","variety","baseline","soil","budget","emitterFlow","pumpCapacity","maxHours","efficiency","restday"].forEach(function(id){
     $(id).addEventListener("input", render);
     $(id).addEventListener("change", render);
   });
