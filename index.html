@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Avocado Irrigation Planner</title>
+<script>
+// Applied before the stylesheet paints, so switching back to a saved preference never flashes
+// the wrong theme first.
+(function(){
+  try{
+    var t = localStorage.getItem("avocado-theme");
+    if(t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  }catch(e){}
+})();
+</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   /* layout: location map -> plot/pump limits -> forecast -> output plan, all stacked single-column panels */
@@ -196,6 +206,7 @@
   }
   .pc-unit{display:block;font-size:0.6rem;color:var(--muted);font-family:var(--font-body);margin-top:3px;}
   .pc-total{font-size:0.7rem;color:var(--muted);margin-top:6px;font-family:var(--font-mono);}
+  .pc-comp{font-size:0.62rem;color:var(--soil);margin-top:4px;font-family:var(--font-mono);}
   .pc-when{
     display:inline-block;
     margin-top:8px;
@@ -394,6 +405,24 @@
   .boot-error strong{display:block;margin-bottom:4px;}
   .boot-error pre{white-space:pre-wrap;word-break:break-word;font-size:0.76rem;margin:8px 0 0;}
 
+  .theme-toggle{
+    position:fixed;
+    top:max(12px, env(safe-area-inset-top,0px));
+    right:max(12px, env(safe-area-inset-right,0px));
+    z-index:50;
+    width:40px;height:40px;
+    border-radius:50%;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--ink);
+    cursor:pointer;
+    padding:0;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 4px rgba(0,0,0,0.15);
+  }
+  .theme-toggle svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  @media print{ .theme-toggle{display:none !important;} }
+
   .print-only{display:none;}
   @media print{
     body{background:#fff;color:#000;padding:0;}
@@ -413,6 +442,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 </head>
 <body>
+
+<button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch between light and dark"></button>
 
 <div class="wrap">
 
@@ -615,7 +646,8 @@
   </details>
 
   <footer>
-    <p><strong>How the numbers are built.</strong> Each day's water need (ET<sub>c</sub>) is a baseline L/tree figure, raised on hot days and scaled by how well the soil at the pin holds moisture. The chosen avocado variety scales that baseline too (Mexican-race types like Bacon and Zutano need noticeably less than Guatemalan types like Reed) and also sets how early a moisture reading skips irrigation, since varieties differ in how prone they are to root rot. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing (assuming about 80% of it reaches the root zone) and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally; rest days are never watered. Any day whose demand would exceed the pump's flow rate &times; max hours is capped at that ceiling.</p>
+    <p><strong>How the numbers are built.</strong> Each day's water need (ET<sub>c</sub>) is a baseline L/tree figure, raised on hot days and scaled by how well the soil at the pin holds moisture. The chosen avocado variety scales that baseline too (Mexican-race types like Bacon and Zutano need noticeably less than Guatemalan types like Reed) and also sets how early a moisture reading skips irrigation, since varieties differ in how prone they are to root rot. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing (assuming about 80% of it reaches the root zone) and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
+    <p><strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost: whatever it would have needed is split in half onto the day before (so the soil is already moist going into the dry day) and the day after (to make up the rest), so the week's total stays the same as it would without a rest day at all — only the timing changes. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely ("None") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's flow rate &times; max hours is capped at that ceiling and flagged.</p>
     <p><strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.</p>
     <p><strong>Ground sensor.</strong> Only "today's" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.</p>
     <p><strong>Choosing dates.</strong> The calendar sets which 7-day window "this week" means. Greyed-out dates have no forecast (Open-Meteo's own live range is roughly 90 days back to 15 days ahead) — you can still pick them, but you'll enter that week's weather by hand.</p>
@@ -653,6 +685,41 @@
   window.addEventListener("afterprint", function(){
     document.querySelectorAll("details").forEach(function(d, idx){ d.open = detailsOpenState[idx]; });
   });
+
+  // ---------- Theme toggle ----------
+  // A head-of-document inline script already applied any saved preference before first paint
+  // (avoids a flash of the wrong theme); this just wires the button and keeps it in sync.
+  var SUN_ICON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+  var MOON_ICON = '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+  function effectiveTheme(){
+    var attr = document.documentElement.getAttribute("data-theme");
+    if(attr === "light" || attr === "dark") return attr;
+    return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+  }
+  function renderThemeButton(){
+    var btn = $("themeToggle");
+    if(!btn) return;
+    var current = effectiveTheme();
+    // Icon shown is the theme a click switches TO.
+    btn.innerHTML = current === "dark" ? SUN_ICON : MOON_ICON;
+    btn.setAttribute("aria-label", current === "dark" ? "Switch to light mode" : "Switch to dark mode");
+    btn.title = btn.getAttribute("aria-label");
+  }
+  function setTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    try{ localStorage.setItem("avocado-theme", theme); }catch(e){}
+    renderThemeButton();
+  }
+  $("themeToggle").addEventListener("click", function(){
+    setTheme(effectiveTheme() === "dark" ? "light" : "dark");
+  });
+  renderThemeButton();
+  if(window.matchMedia){
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){
+      if(!document.documentElement.getAttribute("data-theme")) renderThemeButton();
+    });
+  }
 
   var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   var DEFAULT_WEATHER = ["hot","normal","normal","rainy","normal","hot","normal"];
@@ -1302,7 +1369,7 @@
     return "Baseline demand for a normal day.";
   }
 
-  function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows){
+  function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation){
     var hotIdx = -1, normalIdx = -1, rainyIdx = -1;
     DAYS.forEach(function(d, i){
       if(i === restDay) return;
@@ -1317,6 +1384,15 @@
     var parts = [];
     parts.push("Water " + irrigationDays + " of 7 days this week" +
       (restDay >= 0 ? ", skipping " + DAYS[restDay] + " (rest day)" : "") + ".");
+
+    if(compensation){
+      parts.push(DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) +
+        " L/tree) isn't lost — half is added to " + DAYS[compensation.beforeIdx] + " so the soil goes into " +
+        "the rest day already moist, and half to " + DAYS[compensation.afterIdx] + " to make up the rest. " +
+        "The tree still gets its full week of water, just not on the rest day.");
+    } else if(restDay >= 0){
+      parts.push(DAYS[restDay] + " wasn't forecast to need water anyway, so nothing needs making up.");
+    }
 
     if(hotDays.length && normalIdx !== -1){
       parts.push(hotDays.join(" and ") + " run hottest — about " + Math.floor(litersPerTree[hotIdx]) +
@@ -1372,9 +1448,10 @@
     $("dailyCapOut").textContent = Math.round(dailyCap).toLocaleString();
     var restDay = Number($("restday").value);
 
-    // ET demand minus real rainfall, never negative, never topped up beyond need
-    var raw = DAYS.map(function(_, i){
-      if(i === restDay) return 0;
+    // ET demand minus real rainfall, never negative, never topped up beyond need. Computed for
+    // every day regardless of rest-day status, so the rest day's own unmet need is knowable —
+    // see the redistribution pass right after.
+    function rawNeedForDay(i){
       var w = state.weather[i];
       var useSensorEt = isTodaySlot(i) && sensor.enabled && sensor.etVal != null;
       // A real measured ET reading for today replaces the modeled hot/normal estimate outright —
@@ -1394,7 +1471,26 @@
         need = need * moistureFactor;
       }
       return need;
-    });
+    }
+
+    var raw = DAYS.map(function(_, i){ return i === restDay ? 0 : rawNeedForDay(i); });
+
+    // The rest day doesn't just lose its water — whatever it would have needed gets split onto the
+    // day before and the day after, so the tree still gets its full week of water, just not on the
+    // rest day itself. Before gets a share so the soil goes into the dry day already moist; after
+    // gets a share to make up what the dry day cost. If the rest day would have needed nothing
+    // anyway (e.g. it's forecast to rain), there's nothing to redistribute.
+    var compensation = null;
+    if(restDay >= 0){
+      var restNeed = rawNeedForDay(restDay);
+      if(restNeed > 0.01){
+        var beforeIdx = (restDay + 6) % 7, afterIdx = (restDay + 1) % 7;
+        var half = restNeed / 2;
+        raw[beforeIdx] += half;
+        raw[afterIdx] += half;
+        compensation = { restDay: restDay, beforeIdx: beforeIdx, afterIdx: afterIdx, perTree: restNeed };
+      }
+    }
 
     var rawWeeklyTotal = raw.reduce(function(sum, l){ return sum + l * trees; }, 0);
     var scale = rawWeeklyTotal > budget ? budget / rawWeeklyTotal : 1;
@@ -1429,7 +1525,7 @@
       return plotTotal[i] > 0 ? Math.max(1, Math.ceil(plotTotal[i] / flowRate)) : 0;
     });
 
-    $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows);
+    $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
 
     var soilLabel = $("soil").options[$("soil").selectedIndex].text;
     var weekDates = state.dates ? state.dates.filter(function(d){ return d; }).sort() : [];
@@ -1458,12 +1554,14 @@
       var dateSub = state.dates && state.dates[i] ? '<span class="pc-date">' + formatDate(state.dates[i]) + '</span>' : "";
       var whenHtml = (!isRest && litersPerTree[i] > 0) ?
         '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
+      var compBadge = compensation && (i === compensation.beforeIdx || i === compensation.afterIdx) ?
+        '<div class="pc-comp">+' + DAYS[restDay].slice(0,3) + " top-up</div>" : "";
       div.innerHTML =
         '<div class="pc-day">' + name.slice(0,3) + dateSub + '</div>' +
         (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(state.weather[i])) +
         '<div class="pc-liters">' + litersPerTree[i] + '<span class="pc-unit">L / tree</span></div>' +
         '<div class="pc-total">' + plotTotal[i].toLocaleString() + ' L total</div>' +
-        whenHtml;
+        compBadge + whenHtml;
       cardsEl.appendChild(div);
     });
 
@@ -1513,7 +1611,12 @@
         '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
         '<td class="num">' + deltaStr + "</td>" +
         "<td>" + noteFor(state.weather[i], isRest, capped, litersPerTree[i], state.rainfall[i]||0) +
-          (isTodaySlot(i) && sensor.enabled ? " <em>Adjusted using your sensor reading for today.</em>" : "") + "</td>";
+          (isTodaySlot(i) && sensor.enabled ? " <em>Adjusted using your sensor reading for today.</em>" : "") +
+          (compensation && isRest ? " <em>That water isn't lost — split between " + DAYS[compensation.beforeIdx] +
+            " and " + DAYS[compensation.afterIdx] + ".</em>" : "") +
+          (compensation && i === compensation.beforeIdx ? " <em>Includes a top-up for " + DAYS[restDay] + "'s rest day, watered in advance.</em>" : "") +
+          (compensation && i === compensation.afterIdx ? " <em>Includes a top-up making up for " + DAYS[restDay] + "'s rest day.</em>" : "") +
+          "</td>";
       body.appendChild(tr);
     });
 
