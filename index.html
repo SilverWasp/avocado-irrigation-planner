@@ -963,8 +963,40 @@
     source: (saved && saved.source) || "manual", // field-mode forecast source: "manual" | "live"
     lat: (saved && typeof saved.lat === "number") ? saved.lat : DEFAULT_LAT,
     lon: (saved && typeof saved.lon === "number") ? saved.lon : DEFAULT_LON,
-    hourlyByDate: (saved && saved.hourlyByDate) || {}
+    hourlyByDate: (saved && saved.hourlyByDate) || {},
+    // Plot/hardware/soil-balance field values — see FIELD_INPUT_IDS/FIELD_CHECKBOX_IDS below.
+    // Previously these lived only in the DOM, so every reload silently reverted a grower's actual
+    // tree count, budget, pump specs etc. back to the hardcoded HTML defaults with no warning
+    // (audit defect #8, "partial persistence"). Restored once at boot via applyFieldInputs().
+    fields: (saved && saved.fields && typeof saved.fields === "object") ? saved.fields : {}
   };
+
+  // Every plot/hardware/soil-balance input that should survive a reload. Checkboxes are listed
+  // separately since they're read/written via `.checked`, not `.value`.
+  var FIELD_INPUT_IDS = ["area","density","variety","baseline","soil","budget","emitterFlow","pumpCapacity",
+    "maxHours","efficiency","restday","fieldCapacity","wiltingPoint","rootDepth","depletionFraction","startMoisture"];
+  var FIELD_CHECKBOX_IDS = ["soilBalanceEnabled"];
+
+  // Writes the CURRENT DOM values for all of the above into state.fields and persists them. Called
+  // from the top of render(), so any edit that's reached the point of recalculating the plan has
+  // also been saved — no separate per-field listener wiring needed, and nothing is saved before
+  // it's actually been validated/used at least once by render() itself.
+  function saveFieldInputs(){
+    FIELD_INPUT_IDS.forEach(function(id){ state.fields[id] = $(id).value; });
+    FIELD_CHECKBOX_IDS.forEach(function(id){ state.fields[id] = $(id).checked; });
+    saveState(state);
+  }
+  // Restores previously-saved field values into the DOM. Called once at boot, before the first
+  // render() — anything not present in a fresh/older state.fields is simply left at its HTML
+  // default, so this never fabricates a hardware setting that was never actually saved.
+  function applyFieldInputs(){
+    FIELD_INPUT_IDS.forEach(function(id){
+      if(Object.prototype.hasOwnProperty.call(state.fields, id)) $(id).value = state.fields[id];
+    });
+    FIELD_CHECKBOX_IDS.forEach(function(id){
+      if(Object.prototype.hasOwnProperty.call(state.fields, id)) $(id).checked = !!state.fields[id];
+    });
+  }
 
   // A persisted weekDates selection from a past session can point at a week that no longer includes
   // today — discard the SELECTION (which week is on screen), never the underlying `days` records,
@@ -1870,6 +1902,7 @@
   }
 
   function render(){
+    saveFieldInputs();
     var area = Math.max(0.1, numOr("area", 3));
     var density = Math.max(1, numOr("density", 40));
     var trees = Math.max(1, Math.round(area * density));
@@ -2344,6 +2377,11 @@
 
   updateLatLonInputs();
   applyLocalSoilEstimate();
+  // Runs AFTER the location-based soil estimate above, not before: that estimate unconditionally
+  // overwrites the soil dropdown from lat/lon on every boot, so a persisted value (including a
+  // deliberate manual override away from the estimate) needs to be restored on top of it, not
+  // under it, or the override would be silently lost every single reload.
+  applyFieldInputs();
   setSource(state.source);
   initMap();
   buildRefCards();
