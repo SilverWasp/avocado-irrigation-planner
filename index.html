@@ -629,6 +629,7 @@
 
     <div class="controls-bottom">
       <button id="printBtn">Print / Save as PDF</button>
+      <button id="excelBtn">Download Excel (.xlsx)</button>
       <button class="secondary" id="copyBtn">Copy schedule as text</button>
       <button class="secondary" id="resetBtn">Reset to example week</button>
     </div>
@@ -646,7 +647,8 @@
   </details>
 
   <footer>
-    <p><strong>How the numbers are built.</strong> Each day's water need (ET<sub>c</sub>) is a baseline L/tree figure, raised on hot days and scaled by how well the soil at the pin holds moisture. The chosen avocado variety scales that baseline too (Mexican-race types like Bacon and Zutano need noticeably less than Guatemalan types like Reed) and also sets how early a moisture reading skips irrigation, since varieties differ in how prone they are to root rot. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing (assuming about 80% of it reaches the root zone) and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
+    <p><strong>How the numbers are built.</strong> Each day's water need starts from ET<sub>0</sub> (reference evapotranspiration) pulled live from Open-Meteo, which Open-Meteo itself derives from real temperature (not just a daily max — the actual curve), solar radiation (so a cloudy, overcast day pulls this down on its own, with no separate "cloud cover" step needed), humidity and wind. That single figure, scaled by the chosen variety's crop coefficient (Guatemalan types like Reed run higher than Mexican-race types like Bacon or Zutano) and by how well the soil at the pin holds moisture, is this plan's actual water need for the day. Only when no live pull has happened for a given day does it fall back to the hand-set baseline L/tree figure and a coarser hot/normal guess. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing (assuming about 80% of it reaches the root zone) and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
+    <p><strong>What this does and doesn't cover.</strong> Temperature through the day, cloud cover and sun exposure all feed into ET<sub>0</sub> as above, so yes — they matter, and they're already in the number. A genuine heatwave shows up automatically as a spike in ET<sub>0</sub>, not as a separate flag. What isn't modeled: windblown dust or sandstorms (no free weather API reports this directly) and any physical damage to the canopy — those still need a human to notice and override by hand.</p>
     <p><strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost: whatever it would have needed is split in half onto the day before (so the soil is already moist going into the dry day) and the day after (to make up the rest), so the week's total stays the same as it would without a rest day at all — only the timing changes. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely ("None") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's flow rate &times; max hours is capped at that ceiling and flagged.</p>
     <p><strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.</p>
     <p><strong>Ground sensor.</strong> Only "today's" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.</p>
@@ -656,6 +658,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
   "use strict";
@@ -732,14 +735,18 @@
   // types (Reed, Pinkerton) want more water and, for Pinkerton especially, are notably rot-prone.
   // waterFactor and heatFactor scale the ETc baseline; rotSensitivity scales how early a moisture
   // reading triggers a skip (see FIELD_CAPACITY_REF below).
+  // kc is the FAO-56 mid-season crop coefficient, used to scale real reference evapotranspiration
+  // (ET0 — see rawNeedForDay below) into this variety's actual water use. waterFactor/heatFactor are
+  // the fallback multipliers used only when no live ET0 is available (manual entry); they're kept
+  // proportional to kc so the two paths agree when both are available.
   var VARIETIES = {
-    hass:     { name: "Hass",     waterFactor: 1.00, heatFactor: 1.30, rotSensitivity: 1.1, note: "Industry standard. Moderate water need; roots are sensitive to waterlogging." },
-    fuerte:   { name: "Fuerte",   waterFactor: 0.90, heatFactor: 1.20, rotSensitivity: 0.9, note: "Mexican/Guatemalan hybrid. Broad climate tolerance; slightly lower water need than Hass." },
-    ettinger: { name: "Ettinger", waterFactor: 0.95, heatFactor: 1.25, rotSensitivity: 1.0, note: "Widely grown in Israel. Reasonably drought-tolerant." },
-    pinkerton:{ name: "Pinkerton",waterFactor: 1.05, heatFactor: 1.30, rotSensitivity: 1.3, note: "High-yielding Guatemalan type. Notably prone to root rot — water conservatively." },
-    reed:     { name: "Reed",     waterFactor: 1.15, heatFactor: 1.35, rotSensitivity: 1.0, note: "Guatemalan type. Higher water need; prefers warm conditions." },
-    bacon:    { name: "Bacon",    waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." },
-    zutano:   { name: "Zutano",   waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." }
+    hass:     { name: "Hass",     kc: 0.75, waterFactor: 1.00, heatFactor: 1.30, rotSensitivity: 1.1, note: "Industry standard. Moderate water need; roots are sensitive to waterlogging." },
+    fuerte:   { name: "Fuerte",   kc: 0.68, waterFactor: 0.90, heatFactor: 1.20, rotSensitivity: 0.9, note: "Mexican/Guatemalan hybrid. Broad climate tolerance; slightly lower water need than Hass." },
+    ettinger: { name: "Ettinger", kc: 0.71, waterFactor: 0.95, heatFactor: 1.25, rotSensitivity: 1.0, note: "Widely grown in Israel. Reasonably drought-tolerant." },
+    pinkerton:{ name: "Pinkerton",kc: 0.79, waterFactor: 1.05, heatFactor: 1.30, rotSensitivity: 1.3, note: "High-yielding Guatemalan type. Notably prone to root rot — water conservatively." },
+    reed:     { name: "Reed",     kc: 0.86, waterFactor: 1.15, heatFactor: 1.35, rotSensitivity: 1.0, note: "Guatemalan type. Higher water need; prefers warm conditions." },
+    bacon:    { name: "Bacon",    kc: 0.64, waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." },
+    zutano:   { name: "Zutano",   kc: 0.64, waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." }
   };
   function getVariety(){ return VARIETIES[$("variety").value] || VARIETIES.hass; }
 
@@ -832,7 +839,7 @@
 
   // ---------- Ground sensor (today only — never persisted, since "today" changes every visit) ----------
   var FIELD_CAPACITY_REF = 0.30; // m3/m3 — rough "comfortably moist" reference for the moisture-credit formula
-  var modelHint = { et0: null, moisture: null }; // Open-Meteo's own modeled estimate for today, shown as a hint
+  var modelHint = { moisture: null }; // Open-Meteo's modeled soil moisture for today, shown as a hint (ET0 lives in state.et0)
   var sensor = { enabled: false, moistureVal: null, etVal: null };
 
   function loadState(){
@@ -856,7 +863,12 @@
     source: (saved && saved.source) || "manual",
     lat: (saved && typeof saved.lat === "number") ? saved.lat : DEFAULT_LAT,
     lon: (saved && typeof saved.lon === "number") ? saved.lon : DEFAULT_LON,
-    hourlyByDate: (saved && saved.hourlyByDate) || {}
+    hourlyByDate: (saved && saved.hourlyByDate) || {},
+    // Real FAO-56 reference evapotranspiration (ET0, mm/day) per weekday slot, from Open-Meteo —
+    // already folds in temperature, solar radiation/cloud cover, humidity and wind. null where no
+    // live pull has happened for that slot, in which case rawNeedForDay() falls back to the
+    // hand-set baseline and hot/normal guess.
+    et0: (saved && saved.et0) || [null,null,null,null,null,null,null]
   };
 
   // weekStart never persists (it's reset to null = "today" above), so a persisted state.dates from a
@@ -1114,6 +1126,10 @@
           // just a display threshold; the irrigation math should credit every bit of real rain, even a
           // sub-threshold drizzle on a day otherwise classified "normal".
           state.rainfall[weekday] = Math.round(precip * 10) / 10;
+          // Real reference evapotranspiration for this day — see rawNeedForDay() for how it
+          // replaces the cruder hot/normal heuristic whenever it's available.
+          var et0Val = d.et0_fao_evapotranspiration && d.et0_fao_evapotranspiration[idx];
+          state.et0[weekday] = typeof et0Val === "number" ? et0Val : null;
           newDates[weekday] = iso;
         });
         state.dates = newDates;
@@ -1130,13 +1146,10 @@
           state.hourlyByDate = byDate;
         }
 
-        // Model-estimated ET0 and soil moisture for today specifically, shown as a hint on the
-        // ground-sensor card — not used in the math unless the sensor toggle is on and empty.
+        // Model-estimated soil moisture for today specifically, shown as a hint on the ground-sensor
+        // card — not used in the math unless the sensor toggle is on and empty. (ET0 is already in
+        // state.et0 from the loop above, and used directly in the math, not just as a hint.)
         var todayStr = todayISO();
-        var todayIdxInResponse = d.time.indexOf(todayStr);
-        if(todayIdxInResponse !== -1 && d.et0_fao_evapotranspiration){
-          modelHint.et0 = d.et0_fao_evapotranspiration[todayIdxInResponse];
-        }
         if(h && h.time && h.soil_moisture_0_to_10cm){
           var todayHourIdx = h.time.indexOf(todayStr + "T12:00");
           if(todayHourIdx !== -1) modelHint.moisture = h.soil_moisture_0_to_10cm[todayHourIdx];
@@ -1306,7 +1319,7 @@
 
     var hintParts = [];
     if(modelHint.moisture != null) hintParts.push("modeled moisture ~" + modelHint.moisture.toFixed(2) + " m³/m³");
-    if(modelHint.et0 != null) hintParts.push("modeled ET0 ~" + modelHint.et0.toFixed(1) + "mm");
+    if(typeof state.et0[TODAY_IDX] === "number") hintParts.push("modeled ET0 ~" + state.et0[TODAY_IDX].toFixed(1) + "mm");
     var hint = document.createElement("small");
     hint.className = "sensor-hint";
     hint.textContent = hintParts.length ?
@@ -1415,13 +1428,18 @@
       parts.push("Best window on " + DAYS[hotIdx] + ": " + formatWindow(windows[hotIdx], 2) + ", the driest stretch in the hourly forecast.");
     }
 
+    // These two constraints are independent, so both get reported when both apply — a plan that's
+    // simultaneously pump-capped on one day and budget-trimmed across every day shouldn't only
+    // mention one of them.
+    if(scale < 0.999){
+      parts.push("Raw demand outran the weekly budget, so every irrigation day was trimmed by about " +
+        Math.round((1 - scale) * 100) + "%.");
+    }
     if(cappedDays.length){
       parts.push("Pump flow limits " + cappedDays.length + " day(s) (" + cappedDays.join(", ") +
         ") below the model's target — plan a top-up on the next irrigation day.");
-    } else if(scale < 0.999){
-      parts.push("Raw demand outran the weekly budget, so every irrigation day was trimmed by about " +
-        Math.round((1 - scale) * 100) + "%.");
-    } else {
+    }
+    if(scale >= 0.999 && !cappedDays.length){
       parts.push("Total use is " + Math.floor(weeklyFinal).toLocaleString() + " L, " + pctUsed.toFixed(0) +
         "% of the " + budget.toLocaleString() + " L budget — comfortably inside both the budget and the pump.");
     }
@@ -1453,11 +1471,23 @@
     // see the redistribution pass right after.
     function rawNeedForDay(i){
       var w = state.weather[i];
-      var useSensorEt = isTodaySlot(i) && sensor.enabled && sensor.etVal != null;
-      // A real measured ET reading for today replaces the modeled hot/normal estimate outright —
-      // it's a direct measurement, not a guess, so there's no reason to also apply the weather factor.
-      var etNeed = useSensorEt ? (sensor.etVal * areaPerTree) :
-        (baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor);
+      var etNeed;
+      if(isTodaySlot(i) && sensor.enabled && sensor.etVal != null){
+        // A real field measurement for today — already reflects actual soil and weather as observed,
+        // so it replaces everything else outright rather than being scaled further.
+        etNeed = sensor.etVal * areaPerTree;
+      } else if(typeof state.et0[i] === "number"){
+        // Real FAO-56 reference evapotranspiration for this day: Open-Meteo derives it from actual
+        // temperature, solar radiation (so a cloudy day pulls this down on its own), humidity and
+        // wind — far more accurate than guessing from a hot/normal label. The crop coefficient (kc)
+        // converts that atmospheric figure into this variety's actual water use; soilFactor still
+        // approximates how much of it the soil holds onto.
+        etNeed = state.et0[i] * variety.kc * soilFactor * areaPerTree;
+      } else {
+        // No live data for this day (manual entry, or never pulled) — fall back to the hand-set
+        // baseline and the coarser hot/normal guess.
+        etNeed = baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor;
+      }
       // Any recorded rainfall counts, not just days labeled "Rainy" — a sub-threshold
       // drizzle on a "Normal" day still reduces how much needs to be irrigated.
       var rainMm = state.rainfall[i] || 0;
@@ -1579,10 +1609,15 @@
         '<div class="sub">' + (cappedDays.length ? cappedDays.length + " day(s) hit the cap" : "never exceeded this week") + '</div></div>';
 
     var warnEl = $("warnings");
+    var warningItems = [];
+    if(rawWeeklyTotal > budget * 1.0001){
+      warningItems.push("Raw demand (" + Math.round(rawWeeklyTotal).toLocaleString() + " L) exceeded the weekly budget, so every irrigation day was scaled down by " + ((1-scale)*100).toFixed(0) + "%.");
+    }
     if(cappedDays.length){
-      warnEl.innerHTML = '<ul class="warning-list"><li>Pump flow limited irrigation on: ' + cappedDays.join(", ") + ". Trees on those days received less than the model's target — plan a top-up on the following irrigation day.</li></ul>";
-    } else if(rawWeeklyTotal > budget * 1.0001){
-      warnEl.innerHTML = '<ul class="warning-list"><li>Raw demand (' + Math.round(rawWeeklyTotal).toLocaleString() + " L) exceeded the weekly budget, so every irrigation day was scaled down by " + (scale*100).toFixed(0) + "%.</li></ul>";
+      warningItems.push("Pump flow limited irrigation on: " + cappedDays.join(", ") + ". Trees on those days received less than the model's target — plan a top-up on the following irrigation day.");
+    }
+    if(warningItems.length){
+      warnEl.innerHTML = '<ul class="warning-list">' + warningItems.map(function(w){ return "<li>" + w + "</li>"; }).join("") + '</ul>';
     } else {
       warnEl.innerHTML = "";
     }
@@ -1649,18 +1684,55 @@
     setTimeout(function(){ btn.textContent = original; }, 1400);
   }
 
+  function getScheduleAOA(){
+    var headers = Array.from(document.querySelectorAll("#scheduleTable thead th")).map(function(th){
+      return th.textContent.trim();
+    });
+    var rows = Array.from($("scheduleBody").querySelectorAll("tr")).map(function(tr){
+      return Array.from(tr.children).map(function(td){ return td.textContent.trim().replace(/\s+/g, " "); });
+    });
+    return [headers].concat(rows);
+  }
+
+  function getPlotSummaryAOA(){
+    var aoa = [["Avocado Irrigation Planner — Plot Summary"], []];
+    var intro = document.querySelector("#printSummary p");
+    if(intro) aoa.push([intro.textContent.trim()], []);
+    Array.from(document.querySelectorAll("#printSummary .print-summary-grid div")).forEach(function(div){
+      var text = div.textContent;
+      var sep = text.indexOf(":");
+      aoa.push(sep === -1 ? [text.trim(), ""] : [text.slice(0, sep).trim(), text.slice(sep + 1).trim()]);
+    });
+    return aoa;
+  }
+
+  function exportExcel(){
+    if(typeof XLSX === "undefined"){
+      alert("The Excel library didn't load (no internet access right now?). Try again, or use Print / Save as PDF instead.");
+      return;
+    }
+    var wb = XLSX.utils.book_new();
+    var summarySheet = XLSX.utils.aoa_to_sheet(getPlotSummaryAOA());
+    summarySheet["!cols"] = [{ wch: 28 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Plot Summary");
+    var scheduleSheet = XLSX.utils.aoa_to_sheet(getScheduleAOA());
+    scheduleSheet["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 26 }, { wch: 16 }, { wch: 12 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, scheduleSheet, "Schedule");
+    XLSX.writeFile(wb, "avocado-irrigation-plan.xlsx");
+  }
+
   function resetToExample(){
     state.weather = DEFAULT_WEATHER.slice();
     state.rainfall = [0,0,0,12,0,0,0];
     state.ref = DEFAULT_REF.slice();
     state.dates = null;
     state.hourlyByDate = {};
+    state.et0 = [null,null,null,null,null,null,null];
     weekStart = null;
     calendarMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     sensor.enabled = false;
     sensor.moistureVal = null;
     sensor.etVal = null;
-    modelHint.et0 = null;
     modelHint.moisture = null;
     $("area").value = 3;
     $("density").value = 40;
@@ -1686,6 +1758,7 @@
   });
   $("copyBtn").addEventListener("click", copySchedule);
   $("printBtn").addEventListener("click", function(){ window.print(); });
+  $("excelBtn").addEventListener("click", exportExcel);
   $("resetBtn").addEventListener("click", resetToExample);
   $("srcManualBtn").addEventListener("click", function(){ setSource("manual"); });
   $("srcLiveBtn").addEventListener("click", function(){ setSource("live"); });
