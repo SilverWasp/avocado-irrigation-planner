@@ -503,6 +503,7 @@
       </div>
     </div>
     <p class="computed-stat">= <strong id="treesOut">120</strong> trees on the plot, about <strong id="spacingOut">25</strong> m&sup2; of root/canopy zone each</p>
+    <p class="computed-stat" id="densityNote"></p>
 
     <div class="field">
       <label for="variety">Avocado variety</label>
@@ -647,7 +648,8 @@
   </details>
 
   <footer>
-    <p><strong>How the numbers are built.</strong> Each day's water need starts from ET<sub>0</sub> (reference evapotranspiration) pulled live from Open-Meteo, which Open-Meteo itself derives from real temperature (not just a daily max — the actual curve), solar radiation (so a cloudy, overcast day pulls this down on its own, with no separate "cloud cover" step needed), humidity and wind. That single figure, scaled by the chosen variety's crop coefficient (Guatemalan types like Reed run higher than Mexican-race types like Bacon or Zutano) and by how well the soil at the pin holds moisture, is this plan's actual water need for the day. Only when no live pull has happened for a given day does it fall back to the hand-set baseline L/tree figure and a coarser hot/normal guess. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing (assuming about 80% of it reaches the root zone) and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
+    <p><strong>How the numbers are built.</strong> Each day's water need starts from ET<sub>0</sub> (reference evapotranspiration) pulled live from Open-Meteo, which Open-Meteo itself derives from real temperature (not just a daily max — the actual curve), solar radiation (so a cloudy, overcast day pulls this down on its own, with no separate "cloud cover" step needed), humidity and wind. That single figure, scaled by the chosen variety's crop coefficient (Guatemalan types like Reed run higher than Mexican-race types like Bacon or Zutano) and by how well the soil at the pin holds moisture, is this plan's actual water need for the day. Only when no live pull has happened for a given day does it fall back to the hand-set baseline L/tree figure and a coarser hot/normal guess. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
+    <p><strong>Tree density vs. plot size.</strong> A single tree's own demand is set by its canopy, not by how much empty land happens to be around it, so each tree's land/water credit is capped at roughly a closed-canopy reference (40 trees/dunam — the default). Planted sparser than that, every tree still gets that full reference share and rainfall is credited the same way, so the plot's total use scales with how many trees are actually out there, not with land you aren't using. Planted denser than that, trees genuinely compete for a shrinking footprint, so each one's share — and rainfall credit — shrinks for real, and total use levels off at the land-area ceiling rather than climbing further. Assumes roughly 80% of any given rainfall reaches the root zone.</p>
     <p><strong>What this does and doesn't cover.</strong> Temperature through the day, cloud cover and sun exposure all feed into ET<sub>0</sub> as above, so yes — they matter, and they're already in the number. A genuine heatwave shows up automatically as a spike in ET<sub>0</sub>, not as a separate flag. What isn't modeled: windblown dust or sandstorms (no free weather API reports this directly) and any physical damage to the canopy — those still need a human to notice and override by hand.</p>
     <p><strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost: whatever it would have needed is split in half onto the day before (so the soil is already moist going into the dry day) and the day after (to make up the rest), so the week's total stays the same as it would without a rest day at all — only the timing changes. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely ("None") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's flow rate &times; max hours is capped at that ceiling and flagged.</p>
     <p><strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.</p>
@@ -1455,6 +1457,22 @@
     $("treesOut").textContent = trees.toLocaleString();
     $("spacingOut").textContent = areaPerTree.toFixed(0);
 
+    // A mature tree's own water demand is set by its canopy size, not by how much empty land
+    // happens to surround it — so below REFERENCE_DENSITY (roughly closed-canopy spacing), each
+    // tree's share is capped at the reference amount instead of growing just because the orchard
+    // is planted sparser. At or above it, trees genuinely compete for a shrinking footprint, so the
+    // share shrinks for real. Net effect: total plot water scales with tree count up to that
+    // reference density, then plateaus at the land-area ceiling beyond it — not literally flat
+    // against area regardless of tree count, which is what this replaces.
+    var REFERENCE_DENSITY = 40;
+    var effAreaPerTree = Math.min(areaPerTree, 1000 / REFERENCE_DENSITY);
+    var densityFactor = Math.min(1, REFERENCE_DENSITY / density); // same cap, for the no-live-data fallback below
+    $("densityNote").textContent = density < REFERENCE_DENSITY ?
+      "Planted sparser than the " + REFERENCE_DENSITY + "/dunam reference, so each tree's own demand is capped at the reference share — total use scales with tree count, not the extra land." :
+      density > REFERENCE_DENSITY ?
+      "Planted denser than the " + REFERENCE_DENSITY + "/dunam reference, so each tree gets a smaller share as they compete for the same land — total use plateaus rather than rising further." :
+      "";
+
     var baseline = Math.max(1, Number($("baseline").value) || 45);
     var soilFactor = Number($("soil").value) || 1;
     var variety = getVariety();
@@ -1475,23 +1493,23 @@
       if(isTodaySlot(i) && sensor.enabled && sensor.etVal != null){
         // A real field measurement for today — already reflects actual soil and weather as observed,
         // so it replaces everything else outright rather than being scaled further.
-        etNeed = sensor.etVal * areaPerTree;
+        etNeed = sensor.etVal * effAreaPerTree;
       } else if(typeof state.et0[i] === "number"){
         // Real FAO-56 reference evapotranspiration for this day: Open-Meteo derives it from actual
         // temperature, solar radiation (so a cloudy day pulls this down on its own), humidity and
         // wind — far more accurate than guessing from a hot/normal label. The crop coefficient (kc)
         // converts that atmospheric figure into this variety's actual water use; soilFactor still
         // approximates how much of it the soil holds onto.
-        etNeed = state.et0[i] * variety.kc * soilFactor * areaPerTree;
+        etNeed = state.et0[i] * variety.kc * soilFactor * effAreaPerTree;
       } else {
         // No live data for this day (manual entry, or never pulled) — fall back to the hand-set
         // baseline and the coarser hot/normal guess.
-        etNeed = baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor;
+        etNeed = baseline * (w === "hot" ? variety.heatFactor : 1.0) * soilFactor * variety.waterFactor * densityFactor;
       }
       // Any recorded rainfall counts, not just days labeled "Rainy" — a sub-threshold
       // drizzle on a "Normal" day still reduces how much needs to be irrigated.
       var rainMm = state.rainfall[i] || 0;
-      var effectiveRainL = rainMm * areaPerTree * INFILTRATION;
+      var effectiveRainL = rainMm * effAreaPerTree * INFILTRATION;
       var need = Math.max(0, etNeed - effectiveRainL);
       // A real soil-moisture reading for today further credits whatever water is already in the ground —
       // at or above the "comfortably moist" reference, skip today outright rather than risk root rot.
