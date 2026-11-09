@@ -2177,11 +2177,15 @@
     status.className = "fetch-status";
     status.textContent = t("forecast_fetching");
 
-    // Capture this request's own identity (location, dates, sequence number) so that if a newer
-    // request starts before this one resolves, this one's response gets discarded on arrival rather
-    // than overwriting whatever the newer request already wrote.
+    // Capture this request's own FULL identity — not just a sequence number, which only catches
+    // "a newer fetchForecast() call started." Audit P0.4: "invalidate pending request identity on
+    // mode, source, date and location changes, WHETHER OR NOT another request starts" — moving
+    // the pin, switching to assignment mode, or changing source while this request is still in
+    // flight (none of which necessarily triggers a brand new fetch) must still stop its eventual
+    // response from being written in as if it described whatever's current now. Checked again, in
+    // full, right before the response is actually applied below.
     var mySeq = ++forecastRequestSeq;
-    var requestLat = state.lat, requestLon = state.lon;
+    var requestLat = state.lat, requestLon = state.lon, requestMode = state.mode, requestSource = state.source;
     var startDate = weekStart || todayISO();
     var endDate = addDaysISO(startDate, 6);
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + requestLat + "&longitude=" + requestLon +
@@ -2197,7 +2201,14 @@
         // A newer fetchForecast() call started while this one was in flight — its response already
         // landed (or is still pending) and takes precedence. Applying this one now would silently
         // overwrite newer, more relevant data with this stale response.
-        if(mySeq !== forecastRequestSeq){
+        if(mySeq !== forecastRequestSeq) return;
+        // The identity itself may have moved on even without a NEW request having started yet —
+        // the pin dragged to a different spot, mode switched to assignment, or source switched
+        // back to manual, all while this one was still in flight. Applying a response whose
+        // location/mode/source no longer matches what's actually on screen would be exactly the
+        // "old-location forecast used for the new plot" problem the audit rules out, sequence
+        // number notwithstanding.
+        if(state.lat !== requestLat || state.lon !== requestLon || state.mode !== requestMode || state.source !== requestSource){
           return;
         }
         var d = data.daily;
