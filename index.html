@@ -1770,6 +1770,11 @@
     // The 7 ISO dates currently on screen, index 0=Sun..6=Sat — a VIEW/selection into `days` above,
     // not a second copy of the data itself.
     weekDates: (saved && saved.weekDates) || null,
+    // Field mode's own week selection, preserved across a round trip through assignment mode
+    // (audit P0.4: switching modes must be nondestructive) — see setMode(). Separate from
+    // weekDates above, which is whichever mode's dates are currently ON SCREEN; this is always
+    // specifically field mode's own choice, restored when coming back to field mode.
+    fieldWeekDates: (saved && saved.fieldWeekDates) || null,
     ref: (saved && saved.ref) || DEFAULT_REF.slice(),
     source: (saved && saved.source) || "manual", // field-mode forecast source: "manual" | "live"
     lat: (saved && typeof saved.lat === "number") ? saved.lat : DEFAULT_LAT,
@@ -1812,9 +1817,14 @@
 
   // A persisted weekDates selection from a past session can point at a week that no longer includes
   // today — discard the SELECTION (which week is on screen), never the underlying `days` records,
-  // which remain valid history for whatever real dates they're keyed to.
+  // which remain valid history for whatever real dates they're keyed to. Same staleness check for
+  // field mode's own remembered week (fieldWeekDates), so coming back to field mode after a long
+  // gap restores a sensible current week instead of a long-past one.
   if(state.weekDates && state.weekDates.indexOf(todayISO()) === -1){
     state.weekDates = null;
+  }
+  if(state.fieldWeekDates && state.fieldWeekDates.indexOf(todayISO()) === -1){
+    state.fieldWeekDates = null;
   }
 
   // Returns the mutable record for a real ISO date, creating a blank one on first touch. This is the
@@ -1827,7 +1837,20 @@
   }
   // Weekday-position convenience for the render/UI code, which still thinks in terms of "today's
   // Sunday slot" etc. — resolves through weekDates to the real date, then to that date's record.
+  //
+  // Assignment mode is a special case, not just a different set of dates: it NEVER reads or
+  // writes state.days at all. Audit P0.4's confirmed defect was that applying the example
+  // overwrote a real field-mode record for the same calendar date (a live ET0=7, rain=9mm record
+  // became a null-ET0, zero-rain assignment record) — because the two modes shared one ISO-keyed
+  // store, and the assignment happens to date itself to "this week," which a field-mode session
+  // may well already have real data for. The fix here is structural, not a guard: assignment
+  // mode's weather/rainfall come directly from the DEFAULT_WEATHER/DEFAULT_RAINFALL constants
+  // every time, so there is no `state.days` entry to collide with in the first place, regardless
+  // of which real dates the assignment happens to land on this week.
   function dayAt(i){
+    if(state.mode === "assignment"){
+      return { weather: DEFAULT_WEATHER[i], rainfall: DEFAULT_RAINFALL[i], et0: null, source: "assignment", provider: null, fetchedAt: null };
+    }
     var iso = state.weekDates && state.weekDates[i];
     return iso ? getDay(iso) : { weather: "normal", rainfall: 0, et0: null, source: "manual", provider: null, fetchedAt: null };
   }
@@ -1868,47 +1891,50 @@
 
   // Builds the deterministic, offline-capable assignment week — exactly 2 hot/1 rainy/4 normal days,
   // Sunday-first — dated against this week's actual Sunday rather than a fixed, eventually-stale
-  // date. Overwrites only those 7 specific dates' records, never anything else in state.days, so a
-  // field-mode history for other real dates is never touched by this.
+  // date. Does NOT touch state.days or state.hourlyByDate at all (see dayAt()'s mode branch and
+  // the hourly-lookup guard in render()) — the dates computed here are only ever used as DISPLAY
+  // labels and for picking the right weekday slot while state.mode === "assignment"; the actual
+  // weather/rainfall always come straight from the constants below, so this can never overwrite
+  // a real field-mode record for the same calendar date (audit P0.4, confirmed defect).
   function applyAssignmentExample(){
     var todayDow = new Date().getDay();
     var sunday = addDaysISO(todayISO(), -todayDow);
     var dates = [];
     for(var k = 0; k < 7; k++) dates.push(addDaysISO(sunday, k));
-    dates.forEach(function(iso, i){
-      var rec = getDay(iso);
-      rec.weather = DEFAULT_WEATHER[i];
-      rec.rainfall = DEFAULT_RAINFALL[i];
-      rec.et0 = null; // assignment mode is explicitly offline/deterministic — never ET0-driven
-      rec.source = "assignment";
-      rec.provider = null;
-      rec.fetchedAt = null;
-      delete state.hourlyByDate[iso]; // don't let a stale real hourly-rain cache leak into a fictional day
-    });
     state.weekDates = dates;
     weekStart = sunday;
   }
 
   // Switches between the two explicit modes the brief calls for. Assignment mode is always rebuilt
   // deterministically on entry (it has no "in-progress" state to preserve by design); field mode just
-  // flips the flag and re-enables live fetch/map/calendar, leaving whatever week is already on screen
-  // in place rather than forcing it back to "today". NOTE: the two modes' day data currently share
-  // the same `state.days`/`state.weekDates` store — a field-mode week that happens to reuse one of
-  // the assignment's 7 dates will be overwritten if the assignment is reapplied, and vice versa. Full
-  // isolation (separate stores per mode) is a known follow-up, not yet built.
+  // flips the flag and re-enables live fetch/map/calendar. Fully nondestructive across a round
+  // trip through assignment mode (audit P0.4) — dayAt()'s mode branch means assignment never
+  // touches state.days in the first place, and state.weekDates (whichever mode's dates are
+  // currently on screen) is saved into/restored from state.fieldWeekDates here, so field mode's
+  // own selected week survives a visit to assignment mode intact rather than being left pointed
+  // at the assignment's own dates.
   function setMode(mode){
+    var previousMode = state.mode;
     state.mode = mode;
     $("modeAssignmentBtn").classList.toggle("active", mode === "assignment");
     $("modeFieldBtn").classList.toggle("active", mode === "field");
     $("assignmentNote").hidden = mode !== "assignment";
     $("srcLiveBtn").disabled = mode === "assignment";
     if(mode === "assignment"){
+      if(previousMode === "field") state.fieldWeekDates = state.weekDates;
       applyAssignmentExample();
       setSource("manual");
-    } else if(!state.weekDates){
-      // Entering field mode with no week selected yet (e.g. straight from a fresh assignment-only
-      // session) needs something on screen before the user touches the calendar or map.
-      setManualDatesFromStart(todayISO());
+    } else if(mode === "field"){
+      if(previousMode === "assignment"){
+        // Restore field mode's own previously-selected week instead of leaving the assignment's
+        // dates in place (state.weekDates currently holds them) or silently forcing "today".
+        state.weekDates = state.fieldWeekDates || null;
+      }
+      if(!state.weekDates){
+        // No field week remembered at all yet (e.g. a fresh, assignment-only session) — needs
+        // something on screen before the user touches the calendar or map.
+        setManualDatesFromStart(todayISO());
+      }
     }
     buildDayCards();
     buildCalendar();
@@ -3319,10 +3345,19 @@
       return plotTotal[i] > 0 && effectiveFlow > 0 ? plotTotal[i] / effectiveFlow : 0;
     });
 
-    var dayBeforeRest = restDay >= 0 ? (restDay + 6) % 7 : -1;
+    // Chronological adjacency (findWeekdayForISO), not weekday-position +-1 — same P0.1 reasoning
+    // as the rest-day compensation block above: restDay's weekday-position - 1 is only the
+    // chronologically preceding day when the displayed week starts on Sunday. Leaving this as
+    // modulo arithmetic would have let the T04 midnight-crossing guard below silently point at
+    // the wrong day for any other week start.
+    var dayBeforeRest = restDay >= 0 && state.weekDates ? findWeekdayForISO(addDaysISO(state.weekDates[restDay], -1)) : -1;
     var windows = DAYS.map(function(_, i){
       if(i === restDay || litersPerTree[i] <= 0) return null;
-      var hourlyArr = state.weekDates && state.weekDates[i] && state.hourlyByDate ? state.hourlyByDate[state.weekDates[i]] : null;
+      // Assignment mode is fully offline/deterministic (brief: "never auto-replace the assignment
+      // with live weather") — it must never pick up a real hourlyByDate cache left over from an
+      // earlier field-mode session that happened to use the same calendar dates.
+      var hourlyArr = (state.mode === "field" && state.weekDates && state.weekDates[i] && state.hourlyByDate) ?
+        state.hourlyByDate[state.weekDates[i]] : null;
       return pickIrrigationWindow(hourlyArr, hoursNeeded[i], i === dayBeforeRest);
     });
 
