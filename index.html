@@ -1089,7 +1089,7 @@
       note_rest: "Rest day — no irrigation.",
       note_capped: "Capped at the pump's flow rate for the window; make up any shortfall the next irrigation day.",
       note_midnightCapped: "Capped so irrigation finishes before midnight, ahead of the rest day — running the full target duration would have bled into the rest day's own date. Make up any shortfall the next irrigation day.",
-      note_invalidEfficiency: "Blocked — system efficiency is blank or outside the valid 0–100% range. Fix it in Plot & pump limits above before any real irrigation times can be scheduled.",
+      note_invalidFields: "Blocked — one or more required fields are blank or out of range. Fix them above before any real irrigation times can be scheduled.",
       note_blocked: "Blocked — this day has real demand, but whole-plot operation isn't hydraulically feasible and no confirmed zone configuration is in place. Nothing is scheduled here until that's resolved above.",
       note_rainSkip: "Rainfall ({mm}mm) already covers the day's need — skipped to avoid over-watering and root rot.",
       note_rainCredit: "Rainfall ({mm}mm) credited against today's need — topped up only the rest, never beyond it.",
@@ -1120,7 +1120,7 @@
       narr_budgetTrim: "Raw demand outran the weekly budget, so every irrigation day was trimmed by about {pct}%.",
       narr_pumpCapped: "Pump flow limits {n} day(s) ({days}) below the model's target — plan a top-up on the next irrigation day.",
       narr_blocked: "This plan is BLOCKED, not scheduled: whole-plot operation needs {flow} L/h but the pump supplies only {pump} L/h, and no confirmed, feasible zone configuration is in place. Configure and confirm zones above (or adjust pump/demand) before any real irrigation times can be scheduled.",
-      narr_invalidEfficiency: "This plan is BLOCKED, not scheduled: system efficiency is blank or outside the valid 0–100% range, so no gross-to-net water conversion can be computed. Fix it in Plot & pump limits above before any real irrigation times can be scheduled.",
+      narr_invalidFields: "This plan is BLOCKED, not scheduled: one or more required fields are blank or out of their valid range ({fields}). Fix them above before any real irrigation times can be scheduled.",
       narr_comfortable: "Total use is {total} L, {pct}% of the {budget} L budget — comfortably inside both the budget and the pump.",
 
       card_today: "today",
@@ -1177,7 +1177,11 @@
       warn_budgetExceeded: "Raw demand ({raw} L) exceeded the weekly budget, so every irrigation day was scaled down by {pct}%.",
       warn_pumpLimited: "Pump flow limited irrigation on: {days}. Trees on those days received less than the model's target — plan a top-up on the following irrigation day.",
       warn_midnightCapped: "Finishing before midnight (ahead of the rest day) limited irrigation on: {days}. Trees on those days received less than the model's target — plan a top-up on the following irrigation day.",
-      warn_invalidEfficiency: "System efficiency must be greater than 0% and at most 100% — it's currently blank or out of that range, so no irrigation is being scheduled anywhere this week until it's fixed above.",
+      warn_invalidFields: "These fields are blank or out of their valid range, so no irrigation is being scheduled anywhere this week until they're fixed above: {fields}.",
+      field_area: "Plot size", field_density: "Tree density", field_baseline: "Baseline L/tree",
+      field_canopyCoverage: "Canopy coverage", field_budget: "Weekly water budget",
+      field_emitterFlow: "Emitter flow", field_pumpCapacity: "Pump capacity",
+      field_maxHours: "Max irrigation hours/day", field_efficiency: "System efficiency",
 
       sched_noIrrigation: "No irrigation",
       sched_skipNoWatering: "Skip — no watering needed",
@@ -1404,7 +1408,7 @@
       note_rest: "יום מנוחה — ללא השקיה.",
       note_capped: "מוגבל לקצב הזרימה של המשאבה עבור החלון; השלימו כל גירעון ביום ההשקיה הבא.",
       note_midnightCapped: "מוגבל כדי שההשקיה תסתיים לפני חצות, לפני יום המנוחה — הפעלה למשך הזמן המלא הייתה חולשת לתאריך של יום המנוחה עצמו. השלימו כל גירעון ביום ההשקיה הבא.",
-      note_invalidEfficiency: "חסום — יעילות המערכת ריקה או מחוץ לטווח התקין של 0–100%. תקנו זאת בהגדרות החלקה והמשאבה למעלה לפני שניתן לתזמן זמני השקיה אמיתיים כלשהם.",
+      note_invalidFields: "חסום — שדה אחד או יותר ריק או מחוץ לטווח. תקנו אותם למעלה לפני שניתן לתזמן זמני השקיה אמיתיים כלשהם.",
       note_blocked: "חסום — ליום הזה יש ביקוש אמיתי, אך הפעלת כל החלקה אינה אפשרית הידראולית ואין תצורת אזורים מאושרת. שום דבר לא מתוזמן כאן עד שזה ייפתר למעלה.",
       note_rainSkip: "הגשם ({mm} מ\"מ) כבר מכסה את צורך היום — דולג כדי למנוע עודף השקיה וריקבון שורשים.",
       note_rainCredit: "הגשם ({mm} מ\"מ) זוכה כנגד הצורך של היום — הושלם רק השארית, לעולם לא מעבר לכך.",
@@ -1435,7 +1439,7 @@
       narr_budgetTrim: "הביקוש הגולמי חרג מהתקציב השבועי, כך שכל יום השקיה קוצץ בכ-{pct}%.",
       narr_pumpCapped: "זרימת המשאבה מגבילה {n} יום/ימים ({days}) מתחת ליעד המודל — תכננו השלמה ביום ההשקיה הבא.",
       narr_blocked: "התוכנית הזו חסומה, לא מתוזמנת: הפעלת כל החלקה דורשת {flow} ליטר/שעה אך המשאבה מספקת רק {pump} ליטר/שעה, ואין תצורת אזורים מאושרת ואפשרית. הגדירו ואשרו אזורים למעלה (או התאימו את המשאבה/הביקוש) לפני שניתן לתזמן זמני השקיה אמיתיים כלשהם.",
-      narr_invalidEfficiency: "התוכנית הזו חסומה, לא מתוזמנת: יעילות המערכת ריקה או מחוץ לטווח התקין של 0–100%, כך שלא ניתן לחשב המרה בין ליטרים גולמיים לנטו. תקנו זאת בהגדרות החלקה והמשאבה למעלה לפני שניתן לתזמן זמני השקיה אמיתיים כלשהם.",
+      narr_invalidFields: "התוכנית הזו חסומה, לא מתוזמנת: שדה אחד או יותר ריק או מחוץ לטווח התקין שלו ({fields}). תקנו אותם למעלה לפני שניתן לתזמן זמני השקיה אמיתיים כלשהם.",
       narr_comfortable: "סך השימוש הוא {total} ליטר, {pct}% מתקציב {budget} הליטר — בנוחות בתוך גם התקציב וגם המשאבה.",
 
       card_today: "היום",
@@ -1492,7 +1496,11 @@
       warn_budgetExceeded: "הביקוש הגולמי ({raw} ליטר) חרג מהתקציב השבועי, כך שכל יום השקיה הוקטן ב-{pct}%.",
       warn_pumpLimited: "זרימת המשאבה הגבילה השקיה ב: {days}. העצים בימים אלה קיבלו פחות מיעד המודל — תכננו השלמה ביום ההשקיה הבא.",
       warn_midnightCapped: "סיום לפני חצות (לפני יום המנוחה) הגביל השקיה ב: {days}. העצים בימים אלה קיבלו פחות מיעד המודל — תכננו השלמה ביום ההשקיה הבא.",
-      warn_invalidEfficiency: "יעילות המערכת חייבת להיות גדולה מ-0% ולכל היותר 100% — כעת היא ריקה או מחוץ לטווח הזה, כך שלא מתוזמנת השקיה בשום מקום השבוע עד שהדבר יתוקן למעלה.",
+      warn_invalidFields: "השדות הבאים ריקים או מחוץ לטווח התקין שלהם, כך שלא מתוזמנת השקיה בשום מקום השבוע עד שהם יתוקנו למעלה: {fields}.",
+      field_area: "גודל החלקה", field_density: "צפיפות עצים", field_baseline: "ליטר/עץ בסיס",
+      field_canopyCoverage: "כיסוי צמרת", field_budget: "תקציב מים שבועי",
+      field_emitterFlow: "זרימת טפטפת", field_pumpCapacity: "קיבולת משאבה",
+      field_maxHours: "שעות השקיה מרביות/יום", field_efficiency: "יעילות המערכת",
 
       sched_noIrrigation: "ללא השקיה",
       sched_skipNoWatering: "דילוג — לא נדרשת השקיה",
@@ -1711,6 +1719,26 @@
     var n = Number(raw);
     if(!isFinite(n)) return fallback;
     return n < 0 ? 0 : n;
+  }
+
+  // Audit P0.7: "Blank, nonfinite, negative or out-of-range inputs must be validated, not silently
+  // substituted." Unlike numOr (which exists so downstream math always has SOME safe number to
+  // keep computing with), this also reports whether the raw input itself was actually usable, so
+  // callers can surface a real, visible validation error — rather than silently computing a
+  // schedule from a fallback as if it were what the grower actually typed — instead of just
+  // swallowing the problem. value is always a safe number (the fallback, when invalid); valid is
+  // false whenever the raw field was blank, non-finite, or outside the declared min/max/integer
+  // constraints.
+  function validateField(id, fallback, opts){
+    opts = opts || {};
+    var raw = $(id).value;
+    var n = raw === "" ? NaN : Number(raw);
+    var valid = isFinite(n);
+    if(valid && opts.exclusiveMin !== undefined) valid = n > opts.exclusiveMin;
+    else if(valid && opts.min !== undefined) valid = n >= opts.min;
+    if(valid && opts.max !== undefined) valid = n <= opts.max;
+    if(valid && opts.integer) valid = n === Math.round(n);
+    return { value: valid ? n : fallback, valid: valid };
   }
 
   // ---------- Date helpers (local calendar dates, not UTC) ----------
@@ -2956,9 +2984,9 @@
     return '<span class="pill normal">' + t("weather_normal") + '</span>';
   }
 
-  function noteFor(w, isRest, capped, litersPerTree, rainMm, blocked, midnightCapped, efficiencyInvalid){
+  function noteFor(w, isRest, capped, litersPerTree, rainMm, blocked, midnightCapped, invalidConfig){
     if(isRest) return t("note_rest");
-    if(efficiencyInvalid) return t("note_invalidEfficiency");
+    if(invalidConfig) return t("note_invalidFields");
     if(blocked) return t("note_blocked");
     if(midnightCapped) return t("note_midnightCapped");
     if(capped) return t("note_capped");
@@ -2972,12 +3000,12 @@
     return t("note_normal");
   }
 
-  function buildNarrative(litersPerTree, ownNeed, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity, efficiencyValid){
-    // Checked first, ahead of the hydraulic block below — an invalid efficiency isn't a hardware
+  function buildNarrative(litersPerTree, ownNeed, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity, invalidFieldsList){
+    // Checked first, ahead of the hydraulic block below — an invalid field isn't a hardware
     // mismatch, and narr_blocked's own wording (pump/flow figures) would misattribute the reason
     // if reused here (audit P0.7: "distinguish... invalid configuration" from other block causes).
-    if(!efficiencyValid){
-      return t("narr_invalidEfficiency");
+    if(invalidFieldsList){
+      return t("narr_invalidFields", { fields: invalidFieldsList });
     }
     // Blocked overrides everything else below — a hard hardware mismatch with no confirmed,
     // feasible zone setup means there's no real schedule to narrate at all (audit P0.3/P0.7: a
@@ -3100,8 +3128,23 @@
 
   function render(){
     saveFieldInputs();
-    var area = Math.max(0.1, numOr("area", 3));
-    var density = Math.max(1, numOr("density", 40));
+    // Audit P0.7: "Blank, nonfinite, negative or out-of-range inputs must be validated, not
+    // silently substituted... invalid values block the relevant calculation." Every numeric field
+    // that actually drives the schedule is checked here, in one place, against its real physical
+    // range; validateField still returns a safe fallback so the rest of render() below never has
+    // to special-case NaN, but every invalid one is also named in invalidFields, and ANY entry
+    // there blocks real scheduling (effectiveFlow/dailyCap forced to 0, same mechanism an
+    // infeasible hydraulic configuration already uses) with one combined, specific message
+    // instead of silently computing as though the fallback were what the grower actually typed.
+    var invalidFields = [];
+    function vf(id, fallback, opts, label){
+      var r = validateField(id, fallback, opts);
+      if(!r.valid) invalidFields.push(label);
+      return r.value;
+    }
+    var areaV = vf("area", 3, { exclusiveMin: 0 }, t("field_area"));
+    var densityV = vf("density", 40, { exclusiveMin: 0 }, t("field_density"));
+    var area = areaV, density = densityV;
     var trees = Math.max(1, Math.round(area * density));
     var areaPerTree = 1000 / density;
     $("plotTreesSummary").innerHTML = t("plot_treesSummary", { trees: "<strong>" + trees.toLocaleString() + "</strong>", spacing: "<strong>" + areaPerTree.toFixed(0) + "</strong>" });
@@ -3122,34 +3165,29 @@
       "Planted denser than the " + REFERENCE_DENSITY + "/dunam reference, so each tree gets a smaller share as they compete for the same land — total use plateaus rather than rising further." :
       "";
 
-    var baseline = Math.max(1, numOr("baseline", 45));
-    var soilFactor = numOr("soil", 1);
+    var baseline = vf("baseline", 45, { exclusiveMin: 0 }, t("field_baseline"));
+    var soilFactor = numOr("soil", 1); // dropdown-driven preset, not free-text — out of range isn't reachable through the UI
     var variety = getVariety();
     $("varietyNote").textContent = variety.note;
     // A tree that hasn't filled its canopy footprint yet draws proportionally less water — a
     // different concept from the land/density reference above (effAreaPerTree), which is about
     // competition for space, not how developed any one tree's own canopy actually is. Illustrative
     // labels only (the brief is explicit these aren't validated coefficients), editable here.
-    var canopyCoverage = Math.min(100, Math.max(5, numOr("canopyCoverage", 95)));
+    var canopyCoverage = vf("canopyCoverage", 95, { exclusiveMin: 0, max: 100 }, t("field_canopyCoverage"));
     var canopyFactor = canopyCoverage / 100;
-    // Budget, flow rate and max hours are deliberately NOT floored to a minimum of 1 the way the
-    // orchard-setup fields above are — zero is a real, meaningful value for all three ("no water
-    // allocated this week," "pump is off," "no hours available today"), not an invalid input that
-    // should silently fall back to the default. Only a blank/non-numeric field falls back.
-    var budget = numOr("budget", 28000);
-    var emitterFlow = numOr("emitterFlow", 12.5); // L/h, PER TREE — what the hardware can deliver to one tree
-    var pumpCapacity = numOr("pumpCapacity", 1500); // L/h — what the pump can physically push, total
-    var maxHours = numOr("maxHours", 4);
-    // Audit P0.7: "Efficiency must be greater than zero and at most 100%; invalid values block the
-    // relevant calculation." A blank, non-finite, zero, negative or >100% efficiency isn't a value
-    // to silently clamp into range (0% would make every gross figure infinite; >100% claims more
-    // water reaches the roots than was ever pumped) — it blocks real scheduling until fixed, the
-    // same way an infeasible hydraulic configuration already does (effectiveFlow/dailyCap forced to
-    // 0 below), with its own distinct, accurate message rather than borrowing the hydraulic one.
-    var efficiencyRaw = $("efficiency").value;
-    var efficiencyNum = efficiencyRaw === "" ? NaN : Number(efficiencyRaw);
-    var efficiencyValid = isFinite(efficiencyNum) && efficiencyNum > 0 && efficiencyNum <= 100;
-    var efficiencyPct = efficiencyValid ? efficiencyNum : 90;
+    // Budget, flow rate and max hours are deliberately allowed down to exactly 0 (not an exclusive
+    // min) the way the orchard-setup fields above aren't — zero is a real, meaningful value for all
+    // three ("no water allocated this week," "pump is off," "no hours available today"), not an
+    // invalid input. Only blank, non-finite or negative actually blocks. Max hours additionally
+    // can't physically exceed 24 (a single calendar day).
+    var budget = vf("budget", 28000, { min: 0 }, t("field_budget"));
+    var emitterFlow = vf("emitterFlow", 12.5, { min: 0 }, t("field_emitterFlow")); // L/h, PER TREE — what the hardware can deliver to one tree
+    var pumpCapacity = vf("pumpCapacity", 1500, { min: 0 }, t("field_pumpCapacity")); // L/h — what the pump can physically push, total
+    var maxHours = vf("maxHours", 4, { min: 0, max: 24 }, t("field_maxHours"));
+    // Audit P0.7: "Efficiency must be greater than zero and at most 100%" — unlike budget/flow/
+    // hours above, 0% is never physically meaningful here (it would make every gross figure
+    // infinite), so this is the one field with an exclusive rather than inclusive minimum.
+    var efficiencyPct = vf("efficiency", 90, { exclusiveMin: 0, max: 100 }, t("field_efficiency"));
     var efficiency = efficiencyPct / 100;
 
     // Read early (moved ahead of the dailyCap/zone block below) so dailyCapForDay can already
@@ -3167,6 +3205,9 @@
     // explicitly confirmed a sequential-zone setup where every zone individually fits the pump.
     var zoneDemandFlow = trees * emitterFlow;
     var wholePlotFeasible = pumpCapacity <= 0 ? zoneDemandFlow <= 0 : zoneDemandFlow <= pumpCapacity;
+
+    var configValid = invalidFields.length === 0;
+    var invalidFieldsList = invalidFields.join(", ");
 
     var numZones = Math.max(1, Math.min(12, Math.round(numOr("numZones", 1))));
     var zoneTreeCounts = Array.from(document.querySelectorAll("#zoneRows .zone-trees-input")).map(function(el){ return Math.max(0, Math.round(Number(el.value) || 0)); });
@@ -3202,7 +3243,7 @@
     // of flow runs at any instant (the rest wait their turn). Blocked means no deliverable volume
     // at all until hardware is actually sorted out — not a smaller number standing in for zero.
     var effectiveFlow, dailyCap;
-    if(hardwareStatus === "blocked" || !efficiencyValid){
+    if(hardwareStatus === "blocked" || !configValid){
       effectiveFlow = 0;
       dailyCap = 0;
     } else if(hardwareStatus === "feasible-zoned"){
@@ -3416,10 +3457,10 @@
     plotTotalFloat = plotTotalFloat.map(function(total, i){
       var cap = dailyCapForDay(i);
       if(total > cap){
-        // efficiencyValid false forces dailyCap to 0, which would trivially "cap" every single
-        // irrigation day — that's invalid-efficiency blocking the plan (already its own distinct
+        // configValid false forces dailyCap to 0, which would trivially "cap" every single
+        // irrigation day — that's an invalid field blocking the plan (already its own distinct
         // message above), not a real pump/hours/midnight constraint, so it's not recorded as one.
-        if(efficiencyValid){
+        if(configValid){
           if(i === dayBeforeRest && cap < dailyCap){
             midnightCappedDays.push(DAYS[i]);
           } else {
@@ -3495,7 +3536,7 @@
       return pickIrrigationWindow(hourlyArr, hoursNeeded[i], i === dayBeforeRest);
     });
 
-    $("narrative").textContent = buildNarrative(litersPerTree, ownNeed, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity, efficiencyValid);
+    $("narrative").textContent = buildNarrative(litersPerTree, ownNeed, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity, invalidFieldsList);
     renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree, efficiency);
     renderDemandChart(ownNeed, litersPerTree, restDay, compensation);
     renderFormulasPanel({
@@ -3536,7 +3577,7 @@
       var div = document.createElement("div");
       div.className = "plan-card" + (isRest ? " rest" : "") + (capped || midnightCapped ? " capped" : "");
       var dateSub = state.weekDates && state.weekDates[i] ? '<span class="pc-date">' + formatDate(state.weekDates[i]) + '</span>' : "";
-      var blockedHere = (hardwareStatus === "blocked" || !efficiencyValid) && !isRest && ownNeed[i] > 0.01;
+      var blockedHere = (hardwareStatus === "blocked" || !configValid) && !isRest && ownNeed[i] > 0.01;
       var whenHtml = blockedHere ? '<span class="pc-when" style="color:var(--warn);font-weight:600;">' + t("sched_blocked") + '</span>' :
         (!isRest && litersPerTree[i] > 0) ?
         '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
@@ -3571,16 +3612,20 @@
 
     var warnEl = $("warnings");
     var warningItems = [];
-    if(!efficiencyValid){
-      warningItems.push(t("warn_invalidEfficiency"));
+    if(!configValid){
+      warningItems.push(t("warn_invalidFields", { fields: invalidFieldsList }));
     }
-    if(rawWeeklyTotal > budget * 1.0001){
+    // Once blocked by an invalid field, the budget/pump/hours figures below are all computed from
+    // that field's fallback, not from what's actually on screen — reporting "trimmed by 12%" or
+    // "pump flow limited" alongside "nothing is being scheduled anywhere" would read as two
+    // different stories about the same week.
+    if(configValid && rawWeeklyTotal > budget * 1.0001){
       warningItems.push(t("warn_budgetExceeded", { raw: Math.round(rawWeeklyTotal).toLocaleString(), pct: ((1-scale)*100).toFixed(0) }));
     }
-    if(cappedDays.length){
+    if(configValid && cappedDays.length){
       warningItems.push(t("warn_pumpLimited", { days: cappedDays.join(", ") }));
     }
-    if(midnightCappedDays.length){
+    if(configValid && midnightCappedDays.length){
       warningItems.push(t("warn_midnightCapped", { days: midnightCappedDays.join(", ") }));
     }
     if(warningItems.length){
@@ -3607,7 +3652,7 @@
       // watering needed" for a day that's actually blocked would be exactly the "looks fully
       // executable" problem the audit rules out (P0.3/P0.7).
       var whenCell = isRest ? t("sched_noIrrigation") :
-        ((hardwareStatus === "blocked" || !efficiencyValid) && !isRest && ownNeed[i] > 0.01) ? t("sched_blocked") :
+        ((hardwareStatus === "blocked" || !configValid) && !isRest && ownNeed[i] > 0.01) ? t("sched_blocked") :
         litersPerTree[i] <= 0 ? t("sched_skipNoWatering") :
         formatWindowLong(windows[i], hoursNeeded[i]) +
         (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(" + t("sched_defaultSlot") + ")</span>") +
@@ -3627,7 +3672,7 @@
         "<td>" + whenCell + "</td>" +
         '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
         '<td class="num">' + deltaStr + "</td>" +
-        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0, hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01, midnightCapped, !efficiencyValid && !isRest && ownNeed[i] > 0.01) +
+        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0, hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01, midnightCapped, !configValid && !isRest && ownNeed[i] > 0.01) +
           (isTodaySlot(i) && sensor.enabled ? " <em>" + t("sched_sensorAdjusted") + "</em>" : "") +
           (compensation && isRest && compensation.beforeIdx !== -1 && compensation.afterIdx !== -1 ?
             " <em>" + t("sched_compBoth", { beforeDay: DAYS[compensation.beforeIdx], afterDay: DAYS[compensation.afterIdx] }) + "</em>" :
