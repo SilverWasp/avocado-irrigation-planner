@@ -3388,6 +3388,33 @@
     var litersPerTree = litersPerTreeFloat.map(Math.floor);
     var plotTotal = litersPerTree.map(function(l){ return l * trees; });
 
+    // beforeAmount/afterAmount, as captured above, are pre-constraint intentions recorded before
+    // budget-scale or any dailyCap was ever applied to raw[] -- exactly the "pre-constraint
+    // compensation intentions are not delivered water" gap the audit (P0.6) calls out, confirmed
+    // live: the brief's own example describes "about 41 L/tree advanced onto Friday" even though
+    // Friday's actual final allocation came out to only 50 L/tree total, itself below its roughly
+    // 52.5 L/tree unconstrained need -- two numbers that can't actually be reconciled against each
+    // other because one is pre-scale/pre-cap and the other is final. Recompute both from FINAL
+    // numbers only: run ownNeed (each day's own demand, snapshotted above before the compensation
+    // block touched raw[]) through the identical scale+cap pipeline litersPerTree itself just went
+    // through, then take the neighbor day's actual final delivery minus what it would have gotten
+    // on its own under those same final constraints -- that excess is the only amount honestly
+    // describable as "advanced" or "made up", whatever the pre-constraint intention originally was.
+    if(compensation){
+      // ownNeed[i] is GROSS PER-TREE liters (same units as raw[i]/litersPerTree[i]), but
+      // dailyCapForDay(i) is a TOTAL-PLOT ceiling — convert to the plot total before comparing
+      // against the cap, then back to per-tree to match litersPerTree's own units.
+      var ownNeedFinalPerTree = function(i){
+        return Math.floor(Math.min(dailyCapForDay(i), ownNeed[i] * scale * trees) / trees);
+      };
+      if(compensation.beforeIdx !== -1){
+        compensation.beforeAmount = Math.max(0, litersPerTree[compensation.beforeIdx] - ownNeedFinalPerTree(compensation.beforeIdx));
+      }
+      if(compensation.afterIdx !== -1){
+        compensation.afterAmount = Math.max(0, litersPerTree[compensation.afterIdx] - ownNeedFinalPerTree(compensation.afterIdx));
+      }
+    }
+
     var weeklyFinal = plotTotal.reduce(function(a,b){ return a+b; }, 0);
     // budget=0 is a real, meaningful state (see numOr above) — weeklyFinal is always 0 too in that
     // case, so this renders as "0% of 0 L" rather than NaN from a 0/0 division.
