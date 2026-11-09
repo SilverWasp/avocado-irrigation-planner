@@ -947,6 +947,7 @@
       loc_soilSandy: "Sandy / fast-draining",
       loc_detectSoilBtn: "Try precise live lookup (often unavailable)",
       loc_soilStatus: "Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.",
+      loc_mapFailed: "Map failed to load (no network access to the map tiles?). Use the latitude/longitude fields below instead.",
 
       soilBal_eyebrow: "Advanced, optional",
       soilBal_heading: "Soil-water balance (TAW / RAW)",
@@ -1233,6 +1234,7 @@
       loc_soilSandy: "חולית / מתנקזת מהר",
       loc_detectSoilBtn: "נסו זיהוי חי ומדויק (לרוב אינו זמין)",
       loc_soilStatus: "לחצו בכל מקום על המפה כדי להציב שם את הסיכה — סוג הקרקע מתמלא מיד ובאופן אמין מטבלת אקלים/אזורים מובנית (ללא קריאת רשת, כך שלא יכולה להיכשל). כפתור הזיהוי החי הוא בונוס לדיוק נוסף כשהשירות החיצוני הזה במקרה פעיל — אל תסתמכו עליו. ניתן לשנות את התפריט בכל עת.",
+      loc_mapFailed: "טעינת המפה נכשלה (אין גישת רשת לאריחי המפה?). השתמשו בשדות קו הרוחב/קו האורך למטה במקום זאת.",
 
       soilBal_eyebrow: "מתקדם, אופציונלי",
       soilBal_heading: "מאזן מים בקרקע (TAW / RAW)",
@@ -1990,7 +1992,7 @@
       });
     }catch(err){
       var el = $("map");
-      if(el) el.innerHTML = '<p class="map-fallback">Map failed to load (no network access to the map tiles?). Use the latitude/longitude fields below instead.</p>';
+      if(el) el.innerHTML = '<p class="map-fallback">' + t("loc_mapFailed") + '</p>';
     }
   }
 
@@ -3063,18 +3065,18 @@
 
     var soilLabel = $("soil").options[$("soil").selectedIndex].text;
     var printWeekDates = state.weekDates ? state.weekDates.filter(function(d){ return d; }).sort() : [];
-    var weekRange = printWeekDates.length ? formatDate(printWeekDates[0]) + " – " + formatDate(printWeekDates[printWeekDates.length-1]) : "this week";
+    var weekRange = printWeekDates.length ? formatDate(printWeekDates[0]) + " – " + formatDate(printWeekDates[printWeekDates.length-1]) : t("print_thisWeek");
     $("printSummary").innerHTML =
-      "<p style=\"margin:0 0 6px;font-size:0.8rem;color:#555;\">Plan for " + weekRange + " — printed " + new Date().toLocaleDateString() + "</p>" +
+      "<p style=\"margin:0 0 6px;font-size:0.8rem;color:#555;\">" + t("print_planFor", { range: weekRange, printed: new Date().toLocaleDateString(LANG === "he" ? "he-IL" : undefined) }) + "</p>" +
       '<div class="print-summary-grid">' +
-        "<div>Location: " + state.lat.toFixed(3) + ", " + state.lon.toFixed(3) + "</div>" +
-        "<div>Variety: " + variety.name + "</div>" +
-        "<div>Soil: " + soilLabel + "</div>" +
-        "<div>Trees: " + trees.toLocaleString() + " (" + $("area").value + " dunam, " + $("density").value + "/dunam)</div>" +
-        "<div>Weekly budget: " + budget.toLocaleString() + " L</div>" +
-        "<div>Pump: " + pumpCapacity.toLocaleString() + " L/h capacity, " + Math.round(emitterFlow*10)/10 + " L/h/tree emitters, max " + maxHours + " h/day, " + efficiencyPct + "% efficient</div>" +
-        "<div>Rest day: " + (restDay >= 0 ? DAYS[restDay] : "none") + "</div>" +
-        "<div>Water used this week: " + weeklyFinal.toLocaleString() + " L (" + pctUsed.toFixed(0) + "% of budget)</div>" +
+        "<div>" + t("print_location", { lat: state.lat.toFixed(3), lon: state.lon.toFixed(3) }) + "</div>" +
+        "<div>" + t("print_variety", { name: variety.name }) + "</div>" +
+        "<div>" + t("print_soil", { label: soilLabel }) + "</div>" +
+        "<div>" + t("print_trees", { trees: trees.toLocaleString(), area: $("area").value, density: $("density").value }) + "</div>" +
+        "<div>" + t("print_budget", { budget: budget.toLocaleString() }) + "</div>" +
+        "<div>" + t("print_pump", { pump: pumpCapacity.toLocaleString(), emitter: Math.round(emitterFlow*10)/10, maxHours: maxHours, eff: efficiencyPct }) + "</div>" +
+        "<div>" + t("print_restday", { day: restDay >= 0 ? DAYS[restDay] : t("plot_restNone") }) + "</div>" +
+        "<div>" + t("print_waterUsed", { used: weeklyFinal.toLocaleString(), pct: pctUsed.toFixed(0) }) + "</div>" +
       "</div>";
 
     var cardsEl = $("planCards");
@@ -3092,9 +3094,9 @@
         '<div class="pc-comp">+' + DAYS_SHORT[restDay] + " " + t("topUp") + "</div>" : "";
       div.innerHTML =
         '<div class="pc-day">' + DAYS_SHORT[i] + dateSub + '</div>' +
-        (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(dayAt(i).weather)) +
-        '<div class="pc-liters">' + litersPerTree[i] + '<span class="pc-unit">L / tree</span></div>' +
-        '<div class="pc-total">' + plotTotal[i].toLocaleString() + ' L total</div>' +
+        (isRest ? '<span class="pill rest">' + t("pill_rest") + '</span>' : weatherLabel(dayAt(i).weather)) +
+        '<div class="pc-liters">' + litersPerTree[i] + '<span class="pc-unit">' + t("unit_lPerTree") + '</span></div>' +
+        '<div class="pc-total">' + t("pc_total", { total: plotTotal[i].toLocaleString() }) + '</div>' +
         compBadge + whenHtml;
       cardsEl.appendChild(div);
     });
@@ -3102,23 +3104,23 @@
     // summary
     var summary = $("summary");
     summary.innerHTML =
-      '<div class="stat"><p class="eyebrow">Water used</p>' +
-        '<div class="value">' + weeklyFinal.toLocaleString() + ' L</div>' +
-        '<div class="sub">of ' + budget.toLocaleString() + ' L budget (' + pctUsed.toFixed(0) + '%)</div></div>' +
-      '<div class="stat"><p class="eyebrow">Irrigation days</p>' +
+      '<div class="stat"><p class="eyebrow">' + t("sum_waterUsed") + '</p>' +
+        '<div class="value">' + weeklyFinal.toLocaleString() + ' ' + t("unit_l") + '</div>' +
+        '<div class="sub">' + t("sum_ofBudget", { budget: budget.toLocaleString(), pct: pctUsed.toFixed(0) }) + '</div></div>' +
+      '<div class="stat"><p class="eyebrow">' + t("sum_irrigationDays") + '</p>' +
         '<div class="value">' + litersPerTree.filter(function(l){return l>0;}).length + ' / 7</div>' +
-        '<div class="sub">' + (restDay >= 0 ? DAYS[restDay] + " is rest day" : "no rest day set") + '</div></div>' +
-      '<div class="stat"><p class="eyebrow">Pump headroom</p>' +
-        '<div class="value' + (cappedDays.length ? ' warn' : '') + '">' + Math.round(dailyCap).toLocaleString() + ' L/day</div>' +
-        '<div class="sub">' + (cappedDays.length ? cappedDays.length + " day(s) hit the cap" : "never exceeded this week") + '</div></div>';
+        '<div class="sub">' + (restDay >= 0 ? t("sum_isRestDay", { day: DAYS[restDay] }) : t("sum_noRestDay")) + '</div></div>' +
+      '<div class="stat"><p class="eyebrow">' + t("sum_pumpHeadroom") + '</p>' +
+        '<div class="value' + (cappedDays.length ? ' warn' : '') + '">' + Math.round(dailyCap).toLocaleString() + ' ' + t("unit_lPerDay") + '</div>' +
+        '<div class="sub">' + (cappedDays.length ? t("sum_hitCap", { n: cappedDays.length }) : t("sum_neverExceeded")) + '</div></div>';
 
     var warnEl = $("warnings");
     var warningItems = [];
     if(rawWeeklyTotal > budget * 1.0001){
-      warningItems.push("Raw demand (" + Math.round(rawWeeklyTotal).toLocaleString() + " L) exceeded the weekly budget, so every irrigation day was scaled down by " + ((1-scale)*100).toFixed(0) + "%.");
+      warningItems.push(t("warn_budgetExceeded", { raw: Math.round(rawWeeklyTotal).toLocaleString(), pct: ((1-scale)*100).toFixed(0) }));
     }
     if(cappedDays.length){
-      warningItems.push("Pump flow limited irrigation on: " + cappedDays.join(", ") + ". Trees on those days received less than the model's target — plan a top-up on the following irrigation day.");
+      warningItems.push(t("warn_pumpLimited", { days: cappedDays.join(", ") }));
     }
     if(warningItems.length){
       warnEl.innerHTML = '<ul class="warning-list">' + warningItems.map(function(w){ return "<li>" + w + "</li>"; }).join("") + '</ul>';
@@ -3136,30 +3138,30 @@
       var deltaStr = (delta >= 0 ? "+" : "") + Math.round(delta) + " L";
       var barPct = maxLiters > 0 ? Math.round((litersPerTree[i]/maxLiters)*100) : 0;
       var dateLabel = state.weekDates && state.weekDates[i] ? " (" + formatDate(state.weekDates[i]) + ")" : "";
-      var whenCell = isRest ? "No irrigation" : litersPerTree[i] <= 0 ? "Skip — no watering needed" :
+      var whenCell = isRest ? t("sched_noIrrigation") : litersPerTree[i] <= 0 ? t("sched_skipNoWatering") :
         formatWindowLong(windows[i], hoursNeeded[i]) +
-        (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(default slot)</span>");
+        (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(" + t("sched_defaultSlot") + ")</span>");
 
       var tr = document.createElement("tr");
       tr.innerHTML =
         "<td>" + name + dateLabel + "</td>" +
-        "<td>" + (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(dayAt(i).weather)) + "</td>" +
+        "<td>" + (isRest ? '<span class="pill rest">' + t("pill_rest") + '</span>' : weatherLabel(dayAt(i).weather)) + "</td>" +
         '<td class="num">' + litersPerTree[i] +
           '<div class="bar-track"><div class="bar-fill" style="width:' + barPct + '%"></div></div></td>' +
         "<td>" + whenCell + "</td>" +
         '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
         '<td class="num">' + deltaStr + "</td>" +
         "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0) +
-          (isTodaySlot(i) && sensor.enabled ? " <em>Adjusted using your sensor reading for today.</em>" : "") +
+          (isTodaySlot(i) && sensor.enabled ? " <em>" + t("sched_sensorAdjusted") + "</em>" : "") +
           (compensation && isRest && compensation.beforeIdx !== -1 && compensation.afterIdx !== -1 ?
-            " <em>That water isn't lost — split between " + DAYS[compensation.beforeIdx] + " and " + DAYS[compensation.afterIdx] + ".</em>" :
+            " <em>" + t("sched_compBoth", { beforeDay: DAYS[compensation.beforeIdx], afterDay: DAYS[compensation.afterIdx] }) + "</em>" :
            compensation && isRest && compensation.beforeIdx !== -1 ?
-            " <em>That water isn't lost — advanced onto " + DAYS[compensation.beforeIdx] +
-              (compensation.carryoverPerTree > 0.5 ? "; the rest carries into next week (no day after " + DAYS[restDay] + " in this view)." : ".") + "</em>" :
+            " <em>" + t("sched_compBeforeOnly", { beforeDay: DAYS[compensation.beforeIdx] }) +
+              (compensation.carryoverPerTree > 0.5 ? " " + t("sched_compCarryover", { day: DAYS[restDay] }) : "") + "</em>" :
            compensation && isRest && compensation.afterIdx !== -1 ?
-            " <em>That water isn't lost — made up on " + DAYS[compensation.afterIdx] + ".</em>" : "") +
-          (compensation && i === compensation.beforeIdx ? " <em>Includes a top-up for " + DAYS[restDay] + "'s rest day, watered in advance.</em>" : "") +
-          (compensation && i === compensation.afterIdx ? " <em>Includes a top-up making up for " + DAYS[restDay] + "'s rest day.</em>" : "") +
+            " <em>" + t("sched_compAfterOnly", { afterDay: DAYS[compensation.afterIdx] }) + "</em>" : "") +
+          (compensation && i === compensation.beforeIdx ? " <em>" + t("sched_topUpAdvance", { day: DAYS[restDay] }) + "</em>" : "") +
+          (compensation && i === compensation.afterIdx ? " <em>" + t("sched_topUpMakeup", { day: DAYS[restDay] }) + "</em>" : "") +
           "</td>";
       body.appendChild(tr);
     });
@@ -3171,7 +3173,7 @@
     var rows = Array.from($("scheduleBody").querySelectorAll("tr")).map(function(tr){
       return Array.from(tr.children).map(function(td){ return td.textContent.trim().replace(/\s+/g," "); }).join("\t");
     });
-    var text = "Day\tWeather\tL/tree\tWhen\tPlot total (L)\tvs last week\tNotes\n" + rows.join("\n");
+    var text = t("copy_header") + "\n" + rows.join("\n");
     function fallback(){
       var ta = document.createElement("textarea");
       ta.value = text;
@@ -3189,7 +3191,7 @@
     }
     var btn = $("copyBtn");
     var original = btn.textContent;
-    btn.textContent = "Copied";
+    btn.textContent = t("copy_copied");
     setTimeout(function(){ btn.textContent = original; }, 1400);
   }
 
@@ -3204,7 +3206,7 @@
   }
 
   function getPlotSummaryAOA(){
-    var aoa = [["Avocado Irrigation Planner — Plot Summary"], []];
+    var aoa = [[t("excel_title")], []];
     var intro = document.querySelector("#printSummary p");
     if(intro) aoa.push([intro.textContent.trim()], []);
     Array.from(document.querySelectorAll("#printSummary .print-summary-grid div")).forEach(function(div){
@@ -3217,16 +3219,16 @@
 
   function exportExcel(){
     if(typeof XLSX === "undefined"){
-      alert("The Excel library didn't load (no internet access right now?). Try again, or use Print / Save as PDF instead.");
+      alert(t("excel_libMissing"));
       return;
     }
     var wb = XLSX.utils.book_new();
     var summarySheet = XLSX.utils.aoa_to_sheet(getPlotSummaryAOA());
     summarySheet["!cols"] = [{ wch: 28 }, { wch: 40 }];
-    XLSX.utils.book_append_sheet(wb, summarySheet, "Plot Summary");
+    XLSX.utils.book_append_sheet(wb, summarySheet, t("excel_sheetSummary"));
     var scheduleSheet = XLSX.utils.aoa_to_sheet(getScheduleAOA());
     scheduleSheet["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 26 }, { wch: 16 }, { wch: 12 }, { wch: 50 }];
-    XLSX.utils.book_append_sheet(wb, scheduleSheet, "Schedule");
+    XLSX.utils.book_append_sheet(wb, scheduleSheet, t("excel_sheetSchedule"));
     XLSX.writeFile(wb, "avocado-irrigation-plan.xlsx");
   }
 
