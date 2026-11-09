@@ -1053,7 +1053,7 @@
       footer_coverage: "<strong>What this does and doesn't cover.</strong> Temperature through the day, cloud cover and sun exposure all feed into ET<sub>0</sub> as above, so yes — they matter, and they're already in the number. A genuine heatwave shows up automatically as a spike in ET<sub>0</sub>, not as a separate flag. What isn't modeled: windblown dust or sandstorms (no free weather API reports this directly) and any physical damage to the canopy — those still need a human to notice and override by hand.",
       footer_restday: "<strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost — it only goes to a day actually shown in this week's view, on the correct side of the rest day: the day before gets an advance share (so the soil is already moist going into the dry day), the day after gets a make-up share, and either one is skipped if it isn't really in this week's displayed range — a rest day on Saturday, the default, has no \"day after\" inside a Sunday-start week, so advance watering onto Friday carries the whole job, and whatever that can't cover is disclosed as carrying into next week rather than wrongly credited to an earlier day. With the soil-water balance (below) switched on and fed by real ET&#8320;, the advance amount is sized to what the soil can actually hold and to what the rest day's own forecast still needs, not a blind half; otherwise it falls back to splitting evenly across whichever day(s) are actually in view. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely (\"None\") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's actual flow &times; max hours is capped at that ceiling and flagged.",
       footer_timing: "<strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.",
-      footer_sensor: "<strong>Ground sensor.</strong> Only \"today's\" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.",
+      footer_sensor: "<strong>Ground sensor.</strong> Only \"today's\" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at your field capacity (soil-water balance section) skips today's irrigation outright; at your wilting point it credits nothing; in between it scales the need down proportionally — the same field capacity/wilting point you set for the soil-water balance, not a separate hidden threshold. A measured evapotranspiration reading replaces the modeled estimate for today only.",
       footer_dates: "<strong>Choosing dates.</strong> The calendar sets which 7-day window \"this week\" means. Greyed-out dates have no forecast (Open-Meteo's own live range is roughly 90 days back to 15 days ahead) — you can still pick them, but you'll enter that week's weather by hand.",
       footer_sources: "<strong>Data sources.</strong> Weather, modeled soil moisture and ET0: Open-Meteo (reliable in testing). Soil type: a built-in table of named regional surveys plus global desert / Mediterranean / rainforest climate belts — this is the primary source precisely because it makes no network call and so cannot go down. ISRIC SoilGrids is offered as an optional live upgrade for extra precision, but it has proven unreliable in repeated testing (anywhere from under a second to a full timeout on the same query) and should not be relied on. Map: OpenStreetMap. If any live source can't be reached, the affected field falls back to whatever you last set by hand.",
 
@@ -1342,7 +1342,7 @@
       footer_coverage: "<strong>מה זה מכסה ומה לא.</strong> טמפרטורה לאורך היום, כיסוי עננים וחשיפה לשמש כולם מוזנים ל-ET<sub>0</sub> כאמור לעיל, אז כן — הם משנים, וכבר נמצאים במספר. גל חום אמיתי מופיע אוטומטית כזינוק ב-ET<sub>0</sub>, לא כדגל נפרד. מה שלא מתוארך: אבק נישא ברוח או סופות חול (אין שירות תחזית חינמי שמדווח על כך ישירות) ונזק פיזי לנוף — אלה עדיין דורשים שאדם ישים לב ויעקוף ידנית.",
       footer_restday: "<strong>יום מנוחה.</strong> יום המנוחה עצמו לעולם לא מושקה, אך המים שלו אינם פשוט אבודים — הם הולכים רק ליום שבאמת מוצג בתצוגת השבוע הזו, בצד הנכון של יום המנוחה: היום שלפני מקבל נתח מוקדם (כך שהקרקע כבר לחה לקראת היום היבש), היום שאחרי מקבל נתח השלמה, וכל אחד מהם מדולג אם הוא לא באמת בטווח המוצג של השבוע הזה — יום מנוחה בשבת, ברירת המחדל, אין לו \"יום אחרי\" בתוך שבוע שמתחיל ביום ראשון, כך שהשקיה מוקדמת ביום שישי נושאת את כל המשימה, ומה שהיא לא מצליחה לכסות מדווח כמעבר לשבוע הבא במקום להיזקף בטעות ליום מוקדם יותר. כאשר מאזן המים בקרקע (למטה) מופעל וניזון מ-ET&#8320; אמיתי, כמות ההשקיה המוקדמת נקבעת לפי מה שהקרקע יכולה להחזיק בפועל ולפי מה שיום המנוחה עצמו עדיין צריך לפי התחזית, לא חצי עיוור; אחרת היא חוזרת לחלוקה שווה בין היום/ימים שבאמת מוצגים. אם יום המנוחה לא היה צריך מים בכלל (למשל אם יורד גשם), דבר לא מחולק מחדש. כיבוי יום המנוחה לגמרי (\"ללא\") מבטל גם את השלב הזה, כי כל יום מושקה בפני עצמו. כל יום שהביקוש שלו — כולל נתח מחולק מחדש — היה עולה על הספיקה בפועל של המשאבה כפול שעות מרביות, מוגבל לתקרה הזו ומסומן.",
       footer_timing: "<strong>תזמון.</strong> חלון ההשקיה של כל יום נבחר מהתחזית השעתית (בוקר מוקדם, ערב, או לילה מאוחר — צהריים לעולם לא בשימוש) לפי איזה מהחלונות האלה יבש ביותר, כדי לצמצם איבוד מהתאדות. ללא נתונים שעתיים, המערכת חוזרת לחלון בוקר מוקדם גנרי.",
-      footer_sensor: "<strong>חיישן קרקע.</strong> רק הכרטיס של \"היום\" מקבל קריאת חיישן אמיתית — ימי התחזית הקדימה הם עדיין הערכות, ולא ניתן למדוד יום שכבר עבר. קריאת לחות בגובה 0.30 מ\"ק/מ\"ק ומעלה מדלגת על ההשקיה של היום לגמרי; מתחת לכך היא מקטינה את הצורך באופן יחסי. קריאת התאיידות-דיות נמדדת מחליפה את ההערכה המדומה עבור היום בלבד.",
+      footer_sensor: "<strong>חיישן קרקע.</strong> רק הכרטיס של \"היום\" מקבל קריאת חיישן אמיתית — ימי התחזית הקדימה הם עדיין הערכות, ולא ניתן למדוד יום שכבר עבר. קריאת לחות בקיבולת השדה שלכם (סעיף מאזן המים בקרקע) מדלגת על ההשקיה של היום לגמרי; בנקודת הקמילה שלכם היא לא מזכה בכלום; בין לבין היא מקטינה את הצורך באופן יחסי — אותה קיבולת שדה/נקודת קמילה שהגדרתם למאזן המים בקרקע, לא סף נסתר נפרד. קריאת התאיידות-דיות נמדדת מחליפה את ההערכה המדומה עבור היום בלבד.",
       footer_dates: "<strong>בחירת תאריכים.</strong> הלוח שנה קובע לאיזה חלון של 7 ימים הכוונה ב\"שבוע הזה\". לתאריכים אפורים אין תחזית (הטווח החי של Open-Meteo הוא בערך 90 יום אחורה עד 15 יום קדימה) — עדיין ניתן לבחור בהם, אך תזינו את מזג האוויר של אותו שבוע ידנית.",
       footer_sources: "<strong>מקורות נתונים.</strong> מזג אוויר, לחות קרקע מדומה ו-ET0: Open-Meteo (אמין בבדיקות). סוג קרקע: טבלה מובנית של סקרים אזוריים בשם מפורש בתוספת חגורות אקלים גלובליות של מדבר / ים תיכוני / יער גשם — זהו המקור הראשי בדיוק מפני שהוא לא מבצע קריאת רשת ולכן לא יכול ליפול. ISRIC SoilGrids מוצע כשדרוג חי אופציונלי לדיוק נוסף, אך הוכח כלא אמין בבדיקות חוזרות (בין פחות משנייה לבין פסק זמן מלא באותה שאילתה) ואין להסתמך עליו. מפה: OpenStreetMap. אם לא ניתן להגיע למקור חי כלשהו, השדה המושפע חוזר למה שהוזן ידנית לאחרונה.",
 
@@ -1543,23 +1543,27 @@
   var DEFAULT_LAT = 33.05, DEFAULT_LON = 35.60;
   var INFILTRATION = 0.8; // fraction of rainfall assumed to reach the root zone
 
-  // Water need, heat response, and root-rot sensitivity vary by variety/race — Mexican-race types
-  // (Bacon, Zutano) are the most drought- and cold-tolerant and the most rot-tolerant; Guatemalan
-  // types (Reed, Pinkerton) want more water and, for Pinkerton especially, are notably rot-prone.
-  // waterFactor and heatFactor scale the ETc baseline; rotSensitivity scales how early a moisture
-  // reading triggers a skip (see FIELD_CAPACITY_REF below).
+  // Water need and heat response vary by variety/race — Mexican-race types (Bacon, Zutano) are the
+  // most drought- and cold-tolerant; Guatemalan types (Reed, Pinkerton) want more water. waterFactor
+  // and heatFactor scale the ETc baseline. The `note` field's rot-sensitivity commentary is
+  // descriptive cultivar background only — it no longer drives any number. A per-variety
+  // "rotSensitivity" multiplier used to rescale a real sensor moisture reading's skip threshold
+  // (dividing a fixed 0.30 m3/m3 reference by this factor); removed per audit P0.2.6 as an
+  // arbitrary, undocumented formula with no cited agronomic source. The sensor moisture credit
+  // below now uses the SAME field-capacity/wilting-point inputs as the FAO-56-referenced soil-water
+  // balance section instead, which is an actual documented model rather than a per-cultivar guess.
   // kc is the FAO-56 mid-season crop coefficient, used to scale real reference evapotranspiration
   // (ET0 — see rawNeedForDay below) into this variety's actual water use. waterFactor/heatFactor are
   // the fallback multipliers used only when no live ET0 is available (manual entry); they're kept
   // proportional to kc so the two paths agree when both are available.
   var VARIETIES = {
-    hass:     { name: "Hass",     kc: 0.75, waterFactor: 1.00, heatFactor: 1.30, rotSensitivity: 1.1, note: "Industry standard. Moderate water need; roots are sensitive to waterlogging." },
-    fuerte:   { name: "Fuerte",   kc: 0.68, waterFactor: 0.90, heatFactor: 1.20, rotSensitivity: 0.9, note: "Mexican/Guatemalan hybrid. Broad climate tolerance; slightly lower water need than Hass." },
-    ettinger: { name: "Ettinger", kc: 0.71, waterFactor: 0.95, heatFactor: 1.25, rotSensitivity: 1.0, note: "Widely grown in Israel. Reasonably drought-tolerant." },
-    pinkerton:{ name: "Pinkerton",kc: 0.79, waterFactor: 1.05, heatFactor: 1.30, rotSensitivity: 1.3, note: "High-yielding Guatemalan type. Notably prone to root rot — water conservatively." },
-    reed:     { name: "Reed",     kc: 0.86, waterFactor: 1.15, heatFactor: 1.35, rotSensitivity: 1.0, note: "Guatemalan type. Higher water need; prefers warm conditions." },
-    bacon:    { name: "Bacon",    kc: 0.64, waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." },
-    zutano:   { name: "Zutano",   kc: 0.64, waterFactor: 0.85, heatFactor: 1.15, rotSensitivity: 0.8, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." }
+    hass:     { name: "Hass",     kc: 0.75, waterFactor: 1.00, heatFactor: 1.30, note: "Industry standard. Moderate water need; roots are sensitive to waterlogging." },
+    fuerte:   { name: "Fuerte",   kc: 0.68, waterFactor: 0.90, heatFactor: 1.20, note: "Mexican/Guatemalan hybrid. Broad climate tolerance; slightly lower water need than Hass." },
+    ettinger: { name: "Ettinger", kc: 0.71, waterFactor: 0.95, heatFactor: 1.25, note: "Widely grown in Israel. Reasonably drought-tolerant." },
+    pinkerton:{ name: "Pinkerton",kc: 0.79, waterFactor: 1.05, heatFactor: 1.30, note: "High-yielding Guatemalan type. Notably prone to root rot — water conservatively." },
+    reed:     { name: "Reed",     kc: 0.86, waterFactor: 1.15, heatFactor: 1.35, note: "Guatemalan type. Higher water need; prefers warm conditions." },
+    bacon:    { name: "Bacon",    kc: 0.64, waterFactor: 0.85, heatFactor: 1.15, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." },
+    zutano:   { name: "Zutano",   kc: 0.64, waterFactor: 0.85, heatFactor: 1.15, note: "Mexican race. Cold-hardy, lower water need, more rot-tolerant." }
   };
   function getVariety(){ return VARIETIES[$("variety").value] || VARIETIES.hass; }
 
@@ -1680,7 +1684,6 @@
   var calendarMonthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   // ---------- Ground sensor (today only — never persisted, since "today" changes every visit) ----------
-  var FIELD_CAPACITY_REF = 0.30; // m3/m3 — rough "comfortably moist" reference for the moisture-credit formula
   var modelHint = { moisture: null }; // Open-Meteo's modeled soil moisture for today, shown as a hint (ET0 lives on each day's own record, via getDay/dayAt)
   var sensor = { enabled: false, moistureVal: null, etVal: null };
 
@@ -2977,12 +2980,25 @@
       var rainMm = rec.rainfall || 0;
       var effectiveRainL = rainMm * effAreaPerTree * INFILTRATION;
       var need = Math.max(0, etNeed - effectiveRainL);
-      // A real soil-moisture reading for today further credits whatever water is already in the ground —
-      // at or above the "comfortably moist" reference, skip today outright rather than risk root rot.
+      // A real soil-moisture reading for today further credits whatever water is already in the
+      // ground. Scaled between wilting point (0% credit — the soil's usable water is already spent,
+      // so none of today's need is offset) and field capacity (100% credit — the root zone is full,
+      // skip today outright rather than risk root rot) — the SAME field-capacity/wilting-point
+      // inputs the FAO-56-referenced soil-water balance section uses, not a separate formula. This
+      // replaces a previous per-variety "rotSensitivity" divisor against a fixed 0.30 m3/m3
+      // reference, which had no cited agronomic source (audit P0.2.6) — removed rather than kept
+      // alongside a model that actually has one.
       if(isTodaySlot(i) && sensor.enabled && sensor.moistureVal != null){
-        var effectiveFieldCapacity = FIELD_CAPACITY_REF / variety.rotSensitivity;
-        var moistureFactor = Math.max(0, 1 - (sensor.moistureVal / effectiveFieldCapacity));
-        need = need * moistureFactor;
+        var fcFrac = numOr("fieldCapacity", 32) / 100, wpFrac = numOr("wiltingPoint", 17) / 100;
+        if(fcFrac > wpFrac){
+          var wetness = (sensor.moistureVal - wpFrac) / (fcFrac - wpFrac);
+          var moistureFactor = 1 - Math.max(0, Math.min(1, wetness));
+          need = need * moistureFactor;
+        }
+        // fcFrac <= wpFrac is an invalid soil-input configuration (flagged elsewhere in the soil-
+        // water balance panel); applying no credit at all here, rather than a nonsensical one, is
+        // the same "don't let an invalid input produce a plausible-looking number" principle used
+        // everywhere else in this app.
       }
       // Rain and soil moisture already credit water that reached the root zone directly, but what
       // the system itself must deliver is larger than the plant's net need — drip/sprinkler losses
