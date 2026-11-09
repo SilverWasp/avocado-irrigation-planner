@@ -538,7 +538,7 @@
       </span>
     </summary>
     <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n-html="soilBal_intro">
-      Tracks a root-zone "bucket" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>Diagnostic only for now:</strong> it reports the risk this week's schedule leaves behind; it does not yet change the schedule itself. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — days without it show as not simulated. Defaults below are generic textbook midpoints (<a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.
+      Tracks a root-zone "bucket" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>When enabled, it already affects the schedule:</strong> it decides how much water is safe to advance onto the day before a rest day (see "Rest day" below) — it does not yet influence any other day's own scheduled amount. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — a day without it, and every day after it this week, shows as estimated rather than fully known, since the gap itself is unmeasured. Defaults below are generic textbook midpoints (<a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.
     </p>
     <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin-bottom:10px;">
       <input type="checkbox" id="soilBalanceEnabled"> <span data-i18n="soilBal_enable">Enable soil-water balance tracking</span>
@@ -951,7 +951,7 @@
 
       soilBal_eyebrow: "Advanced, optional",
       soilBal_heading: "Soil-water balance (TAW / RAW)",
-      soilBal_intro: "Tracks a root-zone \"bucket\" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>Diagnostic only for now:</strong> it reports the risk this week's schedule leaves behind; it does not yet change the schedule itself. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — days without it show as not simulated. Defaults below are generic textbook midpoints (<a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.",
+      soilBal_intro: "Tracks a root-zone \"bucket\" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>When enabled, it already affects the schedule:</strong> it decides how much water is safe to advance onto the day before a rest day (see \"Rest day\" below) — it does not yet influence any other day's own scheduled amount. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — a day without it, and every day after it this week, shows as estimated rather than fully known, since the gap itself is unmeasured. Defaults below are generic textbook midpoints (<a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.",
       soilBal_enable: "Enable soil-water balance tracking",
       soilBal_fc: "Field capacity (% vol.)",
       soilBal_wp: "Wilting point (% vol.)",
@@ -965,6 +965,8 @@
       soilBal_notSimulated: "Not simulated — no live ET&#8320; for this day yet.",
       soilBal_riskYes: "Yes — past RAW",
       soilBal_riskNo: "No",
+      soilBal_riskUncertain: "Unknown (estimated)",
+      soilBal_estimatedBadge: "— estimated",
       soilBal_th_start: "Depletion start (mm)",
       soilBal_th_rain: "Rain credit (mm)",
       soilBal_th_irrigation: "Irrigation (mm)",
@@ -1238,7 +1240,7 @@
 
       soilBal_eyebrow: "מתקדם, אופציונלי",
       soilBal_heading: "מאזן מים בקרקע (TAW / RAW)",
-      soilBal_intro: "עוקב אחרי \"דלי\" מים אגור באזור השורשים יום אחר יום — נפרד ומפורט יותר ממקדם סוג הקרקע למעלה — כך שהתוכנית יכולה להציג דלדול אמיתי וסיכון למתח מים, לא רק סך ליטרים. <strong>כרגע לאבחון בלבד:</strong> זה מדווח על הסיכון שהתוכנית לשבוע הזה משאירה מאחור; זה עדיין לא משנה את התוכנית עצמה. דורש ET&#8320; חי ליום (מצב תכנון שטח + משיכת תחזית חיה) כדי לדמות אותו יום — ימים בלעדיו מוצגים כלא מדומים. ברירות המחדל למטה הן נקודות אמצע כלליות מספרי לימוד (<a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, מאזן מים בקרקע</a>), לא מדידה מאומתת עבור החלקה שלכם — החליפו אותן בנתוני בדיקת קרקע או אגרונום משלכם כשיש לכם.",
+      soilBal_intro: "עוקב אחרי \"דלי\" מים אגור באזור השורשים יום אחר יום — נפרד ומפורט יותר ממקדם סוג הקרקע למעלה — כך שהתוכנית יכולה להציג דלדול אמיתי וסיכון למתח מים, לא רק סך ליטרים. <strong>כאשר מופעל, הוא כבר משפיע על התוכנית:</strong> הוא קובע כמה מים בטוח להקדים ליום שלפני יום המנוחה (ראו \"יום מנוחה\" למטה) — הוא עדיין לא משפיע על הכמות המתוזמנת של אף יום אחר. דורש ET&#8320; חי ליום (מצב תכנון שטח + משיכת תחזית חיה) כדי לדמות אותו יום — יום בלעדיו, וכל יום אחריו השבוע, מוצג כמוערך ולא כידוע באופן מלא, מכיוון שהפער עצמו אינו נמדד. ברירות המחדל למטה הן נקודות אמצע כלליות מספרי לימוד (<a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, מאזן מים בקרקע</a>), לא מדידה מאומתת עבור החלקה שלכם — החליפו אותן בנתוני בדיקת קרקע או אגרונום משלכם כשיש לכם.",
       soilBal_enable: "הפעלת מעקב מאזן מים בקרקע",
       soilBal_fc: "קיבולת שדה (% נפח)",
       soilBal_wp: "נקודת קמילה (% נפח)",
@@ -1252,6 +1254,8 @@
       soilBal_notSimulated: "לא מדומה — אין עדיין ET&#8320; חי ליום הזה.",
       soilBal_riskYes: "כן — מעבר ל-RAW",
       soilBal_riskNo: "לא",
+      soilBal_riskUncertain: "לא ידוע (מוערך)",
+      soilBal_estimatedBadge: "— מוערך",
       soilBal_th_start: "דלדול בתחילת היום (מ\"מ)",
       soilBal_th_rain: "זיכוי גשם (מ\"מ)",
       soilBal_th_irrigation: "השקיה (מ\"מ)",
@@ -1794,6 +1798,19 @@
     return [0,1,2,3,4,5,6];
   }
 
+  // Finds which weekday-position (0-6) actually holds a given ISO date in THIS display window, or
+  // -1 if that date isn't shown at all. The only correct way to ask "is the day chronologically
+  // before/after restDay actually in this view" — restDay's weekday-position +-1 is NOT that
+  // answer whenever the window doesn't start on Sunday (audit P0.1): for a Monday Nov 9-15 week,
+  // Saturday (Nov 14) is weekday-position 6, and the day chronologically after it, Sunday Nov 15,
+  // sits at weekday-position 0 — index arithmetic (6+1=7) would wrongly call that "out of window"
+  // even though it's the very next date on screen.
+  function findWeekdayForISO(iso){
+    if(!iso || !state.weekDates) return -1;
+    for(var k = 0; k < 7; k++){ if(state.weekDates[k] === iso) return k; }
+    return -1;
+  }
+
   // Builds the deterministic, offline-capable assignment week — exactly 2 hot/1 rainy/4 normal days,
   // Sunday-first — dated against this week's actual Sunday rather than a fixed, eventually-stale
   // date. Overwrites only those 7 specific dates' records, never anything else in state.days, so a
@@ -2252,32 +2269,58 @@
     return { valid: true, taw: Math.round(taw * 1000) / 1000, raw: Math.round(raw * 1000) / 1000 };
   }
 
-  // Walks the week day by day carrying depletion (mm) forward: rain/irrigation refill the bucket,
-  // ET drains it, and both ends are clamped — refilling past full (depletion 0) runs off as
-  // drainage rather than going negative or vanishing, and ET can never push depletion past TAW
-  // (the bucket being physically empty). etMm/rainMm/irrigationMm are all depth-equivalent for one
+  // A documented tolerance for the stress-risk comparison, not an arbitrary one — absorbs ordinary
+  // binary-floating-point noise at the exact RAW boundary (e.g. a depletion that is mathematically
+  // exactly RAW landing a hair over it after several days of floating-point subtraction) without
+  // widening the real agronomic threshold by any amount a grower would notice.
+  var SOIL_RISK_TOLERANCE_MM = 0.01;
+
+  // Walks the week day by day carrying depletion (mm) forward in actual CHRONOLOGICAL date order
+  // (chronOrder: weekday-positions 0-6 sorted by real calendar date), NOT raw weekday-position
+  // order 0..6 — those only coincide when the displayed week happens to start on Sunday. For a
+  // Monday Nov 9-15 week, weekday-position 0 is Sunday Nov 15, the LAST date in the window, not
+  // the first; walking array order 0..6 would process Nov 15 before Nov 9, feeding the future's
+  // soil state into the past (audit P0.1, confirmed by reproduction before this fix: the diagnostic
+  // table for that exact week showed "Sunday (15 Nov)" as its first row). Rain/irrigation refill
+  // the bucket, ET drains it, both ends are clamped — refilling past full (depletion 0) runs off
+  // as drainage rather than going negative or vanishing, and ET can never push depletion past TAW
+  // (the bucket being physically empty). etMm/rainMm/irrigationMm are depth-equivalent for one
   // tree's reference area, so they're directly comparable to TAW/RAW regardless of tree count.
-  // `known[i]` marks whether day i has real ET0-backed data; an unmeasured day is reported as such
-  // rather than guessed into the trajectory. This is diagnostic only: it reports the stress risk
-  // the ALREADY-DECIDED schedule leaves behind, it does not yet feed back into deciding that
-  // schedule (see the soil-water balance panel's own disclosure in the UI).
-  function simulateSoilBalance(etMm, rainMm, irrigationMm, known, taw, raw, startDepletion){
+  // `known[i]` marks whether day i has real ET0-backed data. A missing day doesn't just skip
+  // itself and let the NEXT known day resume looking fully precise (audit P0.2.1) — once any day
+  // in the walk is unknown, every day from that point on is marked uncertain too, since the
+  // depletion carried forward across the gap rests on an explicit, labeled "assume unchanged"
+  // estimate, not a measurement. Called from two places with different weight: renderSoilBalance's
+  // diagnostic display (read-only, doesn't change anything), and render()'s compensation block,
+  // which uses this same simulation to size the rest-day advance-watering amount — so this
+  // function is NOT universally "diagnostic only" the way it once was; whether a given call
+  // affects the schedule depends on which caller is asking, and the UI copy says so accordingly.
+  function simulateSoilBalance(etMm, rainMm, irrigationMm, known, taw, raw, startDepletion, chronOrder){
     var depletion = startDepletion;
-    return etMm.map(function(et, i){
-      var start = depletion;
+    var certain = true;
+    var result = new Array(7);
+    chronOrder.forEach(function(i){
+      var start = depletion, startCertain = certain;
       if(!known[i]){
-        return { day: i, known: false, depletionStart: start, depletionEnd: start, etMm: 0, rainCredit: 0, irrigationMm: 0, drainageMm: 0, stress: null };
+        certain = false;
+        result[i] = { day: i, known: false, certain: false, depletionStart: start, depletionEnd: start, etMm: 0, rainCredit: 0, irrigationMm: 0, drainageMm: 0, stress: null };
+        return;
       }
       var afterRefill = start - rainMm[i] - irrigationMm[i];
       var drainage = afterRefill < 0 ? -afterRefill : 0;
-      var end = Math.min(Math.max(0, afterRefill) + et, taw);
+      var end = Math.min(Math.max(0, afterRefill) + etMm[i], taw);
       depletion = end;
-      return {
-        day: i, known: true, depletionStart: start, depletionEnd: end,
-        etMm: et, rainCredit: rainMm[i], irrigationMm: irrigationMm[i], drainageMm: drainage,
-        stress: end > raw
+      result[i] = {
+        day: i, known: true, certain: startCertain, depletionStart: start, depletionEnd: end,
+        etMm: etMm[i], rainCredit: rainMm[i], irrigationMm: irrigationMm[i], drainageMm: drainage,
+        // Risk is read from this full-precision `end`, before any display rounding, with the
+        // documented tolerance above — never re-derived from rounded cells (audit: "determine risk
+        // from full-precision model values... not integer-rounded display values"). Once the
+        // trajectory is uncertain, this is explicitly unknown (null) rather than a false yes/no.
+        stress: startCertain ? (end > raw + SOIL_RISK_TOLERANCE_MM) : null
       };
     });
+    return result;
   }
 
   // Reads the soil-water balance inputs once and returns the shared pieces both the compensation
@@ -2319,32 +2362,43 @@
     var known = soilCtx.known, etMm = soilCtx.etMm, rainMm = soilCtx.rainMm;
     var irrigationMm = DAYS.map(function(_, i){ return litersPerTree[i] / effAreaPerTree; });
     var startDepletion = soilCtx.startDepletion;
-    var sim = simulateSoilBalance(etMm, rainMm, irrigationMm, known, tawRaw.taw, tawRaw.raw, startDepletion);
+    var chronOrder = getDisplayOrder();
+    var sim = simulateSoilBalance(etMm, rainMm, irrigationMm, known, tawRaw.taw, tawRaw.raw, startDepletion, chronOrder);
 
-    var rows = sim.map(function(r, i){
+    // Walked in the same chronological order the simulation itself used — sim is still indexed by
+    // weekday-position (sim[i] means "weekday position i's result"), but the TABLE must list rows
+    // by actual date, not by raw array order 0..6, or a non-Sunday-start week would still visually
+    // show the diagnostic table in the wrong sequence even though the underlying math is now fixed.
+    var rows = chronOrder.map(function(i){
+      var r = sim[i];
       var dateLabel = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : "";
       var label = DAYS[i] + (dateLabel ? " (" + dateLabel + ")" : "");
       if(!r.known){
         return "<tr><td>" + label + "</td><td colspan=\"6\" style=\"color:var(--muted);\">" + t("soilBal_notSimulated") + "</td></tr>";
       }
-      // Round every input cell first, then DERIVE the displayed end from those same rounded
-      // numbers (not from the true unrounded end) — otherwise a reader doing "17 - 0 - 1 + 2" by
-      // hand gets 18 while the row shows 17, the exact independent-rounding mismatch already
-      // fixed once for litersPerTree/plotTotal. The true float state still carries forward
-      // unrounded between days, so this only affects what this one row displays.
-      var dStart = Math.round(r.depletionStart), dRain = Math.round(r.rainCredit),
-          dIrrigation = Math.round(r.irrigationMm), dEt = Math.round(r.etMm);
-      var dAfterRefill = dStart - dRain - dIrrigation;
-      var dDrainage = dAfterRefill < 0 ? -dAfterRefill : 0;
-      var dEnd = Math.min(Math.max(0, dAfterRefill) + dEt, Math.round(tawRaw.taw));
-      var riskLabel = (dEnd > Math.round(tawRaw.raw)) ? "<strong style=\"color:#b5460a;\">" + t("soilBal_riskYes") + "</strong>" : t("soilBal_riskNo");
-      return "<tr><td>" + label + "</td>" +
-        "<td class=\"num\">" + dStart + "</td>" +
-        "<td class=\"num\">" + dRain + "</td>" +
-        "<td class=\"num\">" + dIrrigation + "</td>" +
-        "<td class=\"num\">" + dEt + "</td>" +
-        "<td class=\"num\">" + dDrainage + "</td>" +
-        "<td class=\"num\">" + dEnd + "</td>" +
+      // Displayed at one decimal mm, read DIRECTLY from the true float state — not whole-mm
+      // rounded-then-rederived the way this table used to. That earlier approach made one row's
+      // own arithmetic reconcile by hand, but broke the day-to-day carry: Monday could display
+      // "end 33" while Tuesday displayed "start 32" immediately below it, even though both numbers
+      // came from the exact same underlying float (audit P0.2.3: "the end of one day and beginning
+      // of the next must reconcile"). Rounding the identical float to one decimal twice always
+      // gives the identical result, so the carry always reconciles; at one decimal, the residual
+      // from rounding rain/irrigation/ET independently is at most a few hundredths of a mm, well
+      // under anything agronomically visible, so a reader's own arithmetic check on one row now
+      // comes out right too. The RISK label is a separate concern from this display rounding
+      // entirely — it reads r.stress, already computed in simulateSoilBalance from the true,
+      // unrounded depletion with a documented tolerance, never re-derived from these display cells
+      // (audit: risk must come from full-precision values, not rounded display ones).
+      var fmt1 = function(v){ return (Math.round(v * 10) / 10).toFixed(1); };
+      var riskLabel = !r.certain ? t("soilBal_riskUncertain") :
+        r.stress ? "<strong style=\"color:#b5460a;\">" + t("soilBal_riskYes") + "</strong>" : t("soilBal_riskNo");
+      return "<tr" + (!r.certain ? ' style="opacity:0.7;"' : "") + "><td>" + label + (!r.certain ? " " + t("soilBal_estimatedBadge") : "") + "</td>" +
+        "<td class=\"num\">" + fmt1(r.depletionStart) + "</td>" +
+        "<td class=\"num\">" + fmt1(r.rainCredit) + "</td>" +
+        "<td class=\"num\">" + fmt1(r.irrigationMm) + "</td>" +
+        "<td class=\"num\">" + fmt1(r.etMm) + "</td>" +
+        "<td class=\"num\">" + fmt1(r.drainageMm) + "</td>" +
+        "<td class=\"num\">" + fmt1(r.depletionEnd) + "</td>" +
         "<td>" + riskLabel + "</td></tr>";
     }).join("");
 
@@ -2923,18 +2977,25 @@
     // rest day itself. Before gets a share so the soil goes into the dry day already moist; after
     // gets a share to make up what the dry day cost. If the rest day would have needed nothing
     // anyway (e.g. it's forecast to rain), there's nothing to redistribute.
-    // beforeIdx/afterIdx are plain index +-1, NOT modulo-7 — restDay=6 (Saturday, the default/
-    // Shabbat case) has no "day after" inside a Sun-start week; that index-0 Sunday already
-    // happened six days earlier, so wrapping around to it and calling it "Saturday's make-up" is
-    // exactly the mislabeled-earlier-Sunday the brief rules out (T19). Same logic the other way
-    // for restDay=0. A day only gets credited if it is actually, chronologically, in this view.
+    // beforeIdx/afterIdx are found by actual calendar adjacency (findWeekdayForISO), NOT weekday-
+    // position +-1 — restDay's weekday-position +-1 is only the chronologically adjacent day when
+    // the displayed week happens to start on Sunday. For a Monday Nov 9-15 week, Saturday (Nov 14)
+    // is weekday-position 6; the day chronologically after it, Sunday Nov 15, actually sits at
+    // weekday-position 0 and IS inside this same display window — plain index arithmetic (6+1=7)
+    // would wrongly call that "out of window" and miss the recovery day the brief's own R02/R22
+    // require (audit P0.1). For the ordinary Sunday-start case this still correctly finds no "day
+    // after Saturday" in view, since next Sunday's ISO date isn't in state.weekDates at all —
+    // avoiding the mislabeled-earlier-Sunday problem (T19) the same way as before.
+    var chronOrder = getDisplayOrder();
     var soilCtx = getSoilBalanceContext(variety);
     var compensation = null;
     if(restDay >= 0){
       var restNeed = rawNeedForDay(restDay);
       if(restNeed > 0.01){
-        var beforeIdx = restDay - 1, afterIdx = restDay + 1;
-        var beforeInWindow = beforeIdx >= 0, afterInWindow = afterIdx <= 6;
+        var restIso = state.weekDates ? state.weekDates[restDay] : null;
+        var beforeIdx = findWeekdayForISO(addDaysISO(restIso, -1));
+        var afterIdx = findWeekdayForISO(addDaysISO(restIso, 1));
+        var beforeInWindow = beforeIdx !== -1, afterInWindow = afterIdx !== -1;
         compensation = {
           restDay: restDay, beforeIdx: beforeInWindow ? beforeIdx : -1, afterIdx: afterInWindow ? afterIdx : -1,
           perTree: restNeed, beforeAmount: 0, afterAmount: 0, storageAware: false, carryoverPerTree: 0
@@ -2950,8 +3011,11 @@
           // past beforeIdx here — afterIdx (if any) is still waiting on the advance amount below.
           var ownIrrigationMm = raw.map(function(l){ return l / effAreaPerTree; });
           var preSim = simulateSoilBalance(soilCtx.etMm, soilCtx.rainMm, ownIrrigationMm, soilCtx.known,
-            soilCtx.tawRaw.taw, soilCtx.tawRaw.raw, soilCtx.startDepletion);
-          var depletionAtStartBefore = beforeIdx === 0 ? soilCtx.startDepletion : preSim[beforeIdx].depletionStart;
+            soilCtx.tawRaw.taw, soilCtx.tawRaw.raw, soilCtx.startDepletion, chronOrder);
+          // beforeIdx is the actual FIRST date simulated only when it's the first entry of the
+          // chronological walk order, not merely weekday-position 0 (Sunday) — those differ
+          // whenever the week doesn't start on Sunday.
+          var depletionAtStartBefore = chronOrder[0] === beforeIdx ? soilCtx.startDepletion : preSim[beforeIdx].depletionStart;
           var ownNeedBeforeMm = raw[beforeIdx] / effAreaPerTree;
           var rainBeforeMm = soilCtx.rainMm[beforeIdx], etBeforeMm = soilCtx.etMm[beforeIdx];
           var etRestMm = soilCtx.etMm[restDay], rainRestMm = soilCtx.rainMm[restDay];
