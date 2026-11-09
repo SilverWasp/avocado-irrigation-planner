@@ -2253,6 +2253,29 @@
   // A pure bucket model: field capacity / wilting point / root depth give total and readily
   // available water (mm); FC must exceed WP or the depth math is nonsensical (T16). Kept separate
   // from the rendering below so the arithmetic itself is easy to hand-verify.
+  //
+  // THE one authoritative gross-liters -> net-root-zone-depth conversion (audit P0.2: "define
+  // units and meaning for every model quantity... convert net requirements back to gross exactly
+  // once... apply the same conversion in diagnostic simulation, advance-watering decisions, final
+  // schedule evaluation"). litersPerTree/raw are already GROSS figures — rawNeedForDay() divides
+  // the plant's net need by efficiency to get them — so recovering a net depth multiplies by
+  // efficiency again, undoing exactly that markup, never treating the full gross liters as if
+  // they all reached the root zone. Confirmed bug before this fix, matching the brief's own R03:
+  // 100 L gross at 80% efficiency over 25 m^2 was being credited as 100/25 = 4mm net; the correct
+  // figure is 100*0.8/25 = 3.2mm, since only 80% of what's pumped actually lands on the roots.
+  function grossLitersToNetMm(grossLiters, efficiency, effAreaPerTree){
+    return (grossLiters * efficiency) / effAreaPerTree;
+  }
+  // The exact inverse, for the few places that need to go the other way — e.g. the rest-day
+  // compensation decides an advance/make-up amount in net mm (soil storage terms) and then has to
+  // add that onto raw[], which is GROSS liters. Multiplying by area alone (undoing only the area
+  // conversion, forgetting efficiency) would silently under-count how much actually needs to be
+  // pumped to deliver that net amount — exactly the "convert net back to gross exactly once, not
+  // zero times" gap the audit flags.
+  function netMmToGrossLiters(netMm, efficiency, effAreaPerTree){
+    return (netMm * effAreaPerTree) / efficiency;
+  }
+
   function computeTAWRAW(fcPct, wpPct, rootDepthM, depletionFractionPct){
     if(!isFinite(fcPct) || !isFinite(wpPct) || !(fcPct > wpPct) || !(rootDepthM > 0)){
       return { valid: false, taw: 0, raw: 0 };
@@ -2343,10 +2366,11 @@
   }
 
   // Renders the TAW/RAW note and the (optional) per-day diagnostic table from a context already
-  // computed by getSoilBalanceContext(). litersPerTree/effAreaPerTree come from the same render()
-  // pass that already decided the schedule (including any storage-aware rest-day compensation),
-  // so the irrigation column reflects exactly what the plan above delivers, not a separate guess.
-  function renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree){
+  // computed by getSoilBalanceContext(). litersPerTree/effAreaPerTree/efficiency come from the
+  // same render() pass that already decided the schedule (including any storage-aware rest-day
+  // compensation), so the irrigation column reflects exactly what the plan above delivers, not a
+  // separate guess.
+  function renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree, efficiency){
     var tawRaw = soilCtx.tawRaw;
     var note = $("tawRawNote"), panel = $("soilBalancePanel");
     if(!tawRaw.valid){
@@ -2360,7 +2384,10 @@
       return;
     }
     var known = soilCtx.known, etMm = soilCtx.etMm, rainMm = soilCtx.rainMm;
-    var irrigationMm = DAYS.map(function(_, i){ return litersPerTree[i] / effAreaPerTree; });
+    // litersPerTree is GROSS (pump-side) — only `efficiency` of it actually reaches the root zone;
+    // crediting the full gross figure as net infiltration overstates how much the soil actually
+    // received (audit P0.2 / R03).
+    var irrigationMm = DAYS.map(function(_, i){ return grossLitersToNetMm(litersPerTree[i], efficiency, effAreaPerTree); });
     var startDepletion = soilCtx.startDepletion;
     var chronOrder = getDisplayOrder();
     var sim = simulateSoilBalance(etMm, rainMm, irrigationMm, known, tawRaw.taw, tawRaw.raw, startDepletion, chronOrder);
@@ -3009,14 +3036,14 @@
           // (uncompensated) irrigation decision plus real ET/rain, so the advance-watering call
           // reflects the soil's actual state entering that day, not a guess. Does NOT simulate
           // past beforeIdx here — afterIdx (if any) is still waiting on the advance amount below.
-          var ownIrrigationMm = raw.map(function(l){ return l / effAreaPerTree; });
+          var ownIrrigationMm = raw.map(function(l){ return grossLitersToNetMm(l, efficiency, effAreaPerTree); });
           var preSim = simulateSoilBalance(soilCtx.etMm, soilCtx.rainMm, ownIrrigationMm, soilCtx.known,
             soilCtx.tawRaw.taw, soilCtx.tawRaw.raw, soilCtx.startDepletion, chronOrder);
           // beforeIdx is the actual FIRST date simulated only when it's the first entry of the
           // chronological walk order, not merely weekday-position 0 (Sunday) — those differ
           // whenever the week doesn't start on Sunday.
           var depletionAtStartBefore = chronOrder[0] === beforeIdx ? soilCtx.startDepletion : preSim[beforeIdx].depletionStart;
-          var ownNeedBeforeMm = raw[beforeIdx] / effAreaPerTree;
+          var ownNeedBeforeMm = grossLitersToNetMm(raw[beforeIdx], efficiency, effAreaPerTree);
           var rainBeforeMm = soilCtx.rainMm[beforeIdx], etBeforeMm = soilCtx.etMm[beforeIdx];
           var etRestMm = soilCtx.etMm[restDay], rainRestMm = soilCtx.rainMm[restDay];
 
@@ -3031,8 +3058,14 @@
           var neededReductionMm = Math.max(0, endBeforeWithoutAdvance - targetBeforeEnd);
           var advanceMm = Math.min(neededReductionMm, headroomMm);
 
-          raw[beforeIdx] += advanceMm * effAreaPerTree;
-          compensation.beforeAmount = advanceMm * effAreaPerTree;
+          // advanceMm/leftoverMm below are NET soil-storage depths; raw[]/compensation.*Amount are
+          // GROSS liters (same basis as litersPerTree everywhere else), so adding one onto the
+          // other needs the actual inverse conversion (net -> gross divides by efficiency), not
+          // just the area factor — otherwise the amount actually scheduled would under-deliver
+          // the net amount this decision just computed the soil needs.
+          var advanceGrossL = netMmToGrossLiters(advanceMm, efficiency, effAreaPerTree);
+          raw[beforeIdx] += advanceGrossL;
+          compensation.beforeAmount = advanceGrossL;
           compensation.storageAware = true;
 
           var endBeforeWithAdvance = Math.min(soilCtx.tawRaw.taw, Math.max(0, headroomMm - advanceMm) + etBeforeMm);
@@ -3041,14 +3074,15 @@
           // threshold, not all the way to full, matching the under- rather than over-irrigate bias
           // used everywhere else in this app.
           var leftoverMm = Math.max(0, endRest - soilCtx.tawRaw.raw);
+          var leftoverGrossL = netMmToGrossLiters(leftoverMm, efficiency, effAreaPerTree);
           if(afterInWindow){
-            raw[afterIdx] += leftoverMm * effAreaPerTree;
-            compensation.afterAmount = leftoverMm * effAreaPerTree;
+            raw[afterIdx] += leftoverGrossL;
+            compensation.afterAmount = leftoverGrossL;
           } else {
             // No day after in THIS view (restDay is the last day shown, e.g. Saturday) — report
             // whatever the advance watering couldn't absorb as carryover into next week rather
             // than silently dropping it or crediting an earlier day for it.
-            compensation.carryoverPerTree = leftoverMm * effAreaPerTree;
+            compensation.carryoverPerTree = leftoverGrossL;
           }
         } else {
           // Flat half/half fallback — no soil-balance data to reason from (disabled, invalid
@@ -3114,7 +3148,7 @@
     });
 
     $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
-    renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree);
+    renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree, efficiency);
     renderDemandChart(ownNeed, litersPerTree, restDay, compensation);
     renderFormulasPanel({
       mode: state.mode, source: state.source,
