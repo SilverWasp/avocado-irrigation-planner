@@ -483,91 +483,91 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow">Irrigation planning</p>
-    <h1>Avocado Irrigation Planner</h1>
-    <p>Pick any spot on the map. It pulls that location's soil and this week's real hourly forecast, and turns it into a day-by-day, hour-by-hour watering plan — liters per tree, kept inside your water budget and pump, biased to water a little less rather than risk root rot. Everything it pulls automatically, you can also override by hand.</p>
+    <p class="eyebrow" data-i18n="eyebrow_planning">Irrigation planning</p>
+    <h1 data-i18n="appTitle">Avocado Irrigation Planner</h1>
+    <p data-i18n="appIntro">Pick any spot on the map. It pulls that location's soil and this week's real hourly forecast, and turns it into a day-by-day, hour-by-hour watering plan — liters per tree, kept inside your water budget and pump, biased to water a little less rather than risk root rot. Everything it pulls automatically, you can also override by hand.</p>
   </header>
 
   <div class="panel no-print" style="margin-bottom:14px;">
-    <p class="eyebrow">Mode</p>
+    <p class="eyebrow" data-i18n="mode_eyebrow">Mode</p>
     <div class="source-toggle" role="group" aria-label="Planning mode">
-      <button type="button" class="toggle-btn active" id="modeAssignmentBtn">Assignment example</button>
-      <button type="button" class="toggle-btn" id="modeFieldBtn">Field planning</button>
+      <button type="button" class="toggle-btn active" id="modeAssignmentBtn" data-i18n="mode_assignmentBtn">Assignment example</button>
+      <button type="button" class="toggle-btn" id="modeFieldBtn" data-i18n="mode_fieldBtn">Field planning</button>
     </div>
-    <p id="assignmentNote" class="fetch-status" style="margin-top:8px;">
+    <p id="assignmentNote" class="fetch-status" style="margin-top:8px;" data-i18n="mode_assignmentNote">
       Fixed, offline demonstration: exactly 2 hot / 1 rainy / 4 normal days, dated to this week's Sunday. Live forecast is disabled here on purpose — the brief it comes from is never meant to be silently replaced by real weather. Switch to Field planning for a real dated week with live data.
     </p>
   </div>
 
   <div class="panel no-print" style="margin-bottom:14px;">
-    <p class="eyebrow"><span class="step-num">1</span> Location</p>
-    <h2>Where's the plot?</h2>
+    <p class="eyebrow"><span class="step-num">1</span> <span data-i18n="loc_eyebrow">Location</span></p>
+    <h2 data-i18n="loc_heading">Where's the plot?</h2>
     <div id="map"></div>
 
     <div class="latlon-row">
       <div class="field">
-        <label for="latInput">Latitude</label>
+        <label for="latInput" data-i18n="loc_latLabel">Latitude</label>
         <input type="number" id="latInput" step="0.001">
       </div>
       <div class="field">
-        <label for="lonInput">Longitude</label>
+        <label for="lonInput" data-i18n="loc_lonLabel">Longitude</label>
         <input type="number" id="lonInput" step="0.001">
       </div>
-      <button type="button" class="secondary" id="refreshLocationBtn">Refresh data for this spot</button>
+      <button type="button" class="secondary" id="refreshLocationBtn" data-i18n="loc_refreshBtn">Refresh data for this spot</button>
     </div>
 
     <div class="soil-row">
       <div class="field">
-        <label for="soil">Soil type</label>
+        <label for="soil" data-i18n="loc_soilLabel">Soil type</label>
         <select id="soil">
-          <option value="0.85" selected>Heavy clay-loam (retains moisture)</option>
-          <option value="1.0">Loam</option>
-          <option value="1.15">Sandy / fast-draining</option>
+          <option value="0.85" selected data-i18n="loc_soilClay">Heavy clay-loam (retains moisture)</option>
+          <option value="1.0" data-i18n="loc_soilLoam">Loam</option>
+          <option value="1.15" data-i18n="loc_soilSandy">Sandy / fast-draining</option>
         </select>
       </div>
-      <button type="button" class="secondary" id="detectSoilBtn">Try precise live lookup (often unavailable)</button>
+      <button type="button" class="secondary" id="detectSoilBtn" data-i18n="loc_detectSoilBtn">Try precise live lookup (often unavailable)</button>
     </div>
-    <p id="soilStatus" class="fetch-status">Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.</p>
+    <p id="soilStatus" class="fetch-status" data-i18n="loc_soilStatus">Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.</p>
   </div>
 
   <details class="panel no-print" style="margin-bottom:14px;">
     <summary>
       <span>
-        <p class="eyebrow">Advanced, optional</p>
-        <h2>Soil-water balance (TAW / RAW)</h2>
+        <p class="eyebrow" data-i18n="soilBal_eyebrow">Advanced, optional</p>
+        <h2 data-i18n="soilBal_heading">Soil-water balance (TAW / RAW)</h2>
       </span>
     </summary>
-    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;">
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n-html="soilBal_intro">
       Tracks a root-zone "bucket" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>Diagnostic only for now:</strong> it reports the risk this week's schedule leaves behind; it does not yet change the schedule itself. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — days without it show as not simulated. Defaults below are generic textbook midpoints (<a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.
     </p>
     <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin-bottom:10px;">
-      <input type="checkbox" id="soilBalanceEnabled"> Enable soil-water balance tracking
+      <input type="checkbox" id="soilBalanceEnabled"> <span data-i18n="soilBal_enable">Enable soil-water balance tracking</span>
     </label>
     <div class="row2">
       <div class="field">
-        <label for="fieldCapacity">Field capacity (% vol.)</label>
+        <label for="fieldCapacity" data-i18n="soilBal_fc">Field capacity (% vol.)</label>
         <input type="number" id="fieldCapacity" value="32" min="1" max="100" step="1">
       </div>
       <div class="field">
-        <label for="wiltingPoint">Wilting point (% vol.)</label>
+        <label for="wiltingPoint" data-i18n="soilBal_wp">Wilting point (% vol.)</label>
         <input type="number" id="wiltingPoint" value="17" min="0" max="99" step="1">
       </div>
     </div>
     <div class="row2">
       <div class="field">
-        <label for="rootDepth">Effective root depth (m)</label>
+        <label for="rootDepth" data-i18n="soilBal_rootDepth">Effective root depth (m)</label>
         <input type="number" id="rootDepth" value="0.6" min="0.1" step="0.1">
       </div>
       <div class="field">
-        <label for="depletionFraction">Allowed depletion (% of TAW)</label>
+        <label for="depletionFraction" data-i18n="soilBal_depletion">Allowed depletion (% of TAW)</label>
         <input type="number" id="depletionFraction" value="35" min="1" max="100" step="1">
       </div>
     </div>
     <div class="field">
-      <label for="startMoisture">Start-of-week soil moisture</label>
+      <label for="startMoisture" data-i18n="soilBal_startMoisture">Start-of-week soil moisture</label>
       <select id="startMoisture">
-        <option value="raw" selected>Unknown — assume right at the refill threshold (depletion = RAW)</option>
-        <option value="full">Assume full (just irrigated/rained to field capacity)</option>
+        <option value="raw" selected data-i18n="soilBal_startUnknown">Unknown — assume right at the refill threshold (depletion = RAW)</option>
+        <option value="full" data-i18n="soilBal_startFull">Assume full (just irrigated/rained to field capacity)</option>
       </select>
     </div>
     <p class="computed-stat" id="tawRawNote"></p>
@@ -578,25 +578,25 @@
     <summary>
       <span class="step-num">2</span>
       <span>
-        <p class="eyebrow">Set once per season</p>
-        <h2>Plot &amp; pump limits</h2>
+        <p class="eyebrow" data-i18n="plot_eyebrow">Set once per season</p>
+        <h2 data-i18n="plot_heading">Plot &amp; pump limits</h2>
       </span>
     </summary>
     <div class="row2">
       <div class="field">
-        <label for="area">Plot size (dunam, 1000m&sup2;)</label>
+        <label for="area" data-i18n="plot_area">Plot size (dunam, 1000m&sup2;)</label>
         <input type="number" id="area" value="3" min="0.1" step="0.1">
       </div>
       <div class="field">
-        <label for="density">Tree density (trees / dunam)</label>
+        <label for="density" data-i18n="plot_density">Tree density (trees / dunam)</label>
         <input type="number" id="density" value="40" min="1" step="1">
       </div>
     </div>
-    <p class="computed-stat">= <strong id="treesOut">120</strong> trees on the plot, about <strong id="spacingOut">25</strong> m&sup2; of root/canopy zone each</p>
+    <p class="computed-stat" id="plotTreesSummary"></p>
     <p class="computed-stat" id="densityNote"></p>
 
     <div class="field">
-      <label for="variety">Avocado variety</label>
+      <label for="variety" data-i18n="plot_variety">Avocado variety</label>
       <select id="variety">
         <option value="hass" selected>Hass</option>
         <option value="fuerte">Fuerte</option>
@@ -611,71 +611,71 @@
 
     <div class="row2">
       <div class="field">
-        <label for="growthStage">Growth stage</label>
+        <label for="growthStage" data-i18n="plot_growthStage">Growth stage</label>
         <select id="growthStage">
-          <option value="young">Young (just planted)</option>
-          <option value="developing">Developing</option>
-          <option value="mature" selected>Mature</option>
+          <option value="young" data-i18n="plot_stageYoung">Young (just planted)</option>
+          <option value="developing" data-i18n="plot_stageDeveloping">Developing</option>
+          <option value="mature" selected data-i18n="plot_stageMature">Mature</option>
         </select>
       </div>
       <div class="field">
-        <label for="canopyCoverage">Actual canopy coverage (%)</label>
+        <label for="canopyCoverage" data-i18n="plot_canopyCoverage">Actual canopy coverage (%)</label>
         <input type="number" id="canopyCoverage" value="95" min="5" max="100" step="5">
       </div>
     </div>
-    <p class="computed-stat" id="canopyNote">A tree that hasn't filled its canopy footprint yet draws proportionally less water, independent of the land/density reference above. Picking a stage fills in an illustrative coverage (&asymp;50% / 75% / 95%) and a matching root-zone depth for the soil-water balance below — both are editable estimates, not measured figures, so override them if you've actually measured either one. This plan models one uniform zone; if the plot has genuinely mixed ages, plan each age group separately (as its own plot/session) and total the results rather than averaging a stage here.</p>
+    <p class="computed-stat" id="canopyNote" data-i18n-html="plot_canopyNote">A tree that hasn't filled its canopy footprint yet draws proportionally less water, independent of the land/density reference above. Picking a stage fills in an illustrative coverage (&asymp;50% / 75% / 95%) and a matching root-zone depth for the soil-water balance below — both are editable estimates, not measured figures, so override them if you've actually measured either one. This plan models one uniform zone; if the plot has genuinely mixed ages, plan each age group separately (as its own plot/session) and total the results rather than averaging a stage here.</p>
 
     <div class="field">
-      <label for="baseline">Baseline L / tree on a mild day (ET<sub>c</sub> estimate, for this variety)</label>
+      <label for="baseline" data-i18n-html="plot_baseline">Baseline L / tree on a mild day (ET<sub>c</sub> estimate, for this variety)</label>
       <input type="number" id="baseline" value="45" min="1" step="1">
     </div>
 
     <div class="field">
-      <label for="budget">Weekly water budget (L)</label>
+      <label for="budget" data-i18n="plot_budget">Weekly water budget (L)</label>
       <input type="number" id="budget" value="28000" min="1" step="100">
     </div>
 
     <div class="row2">
       <div class="field">
-        <label for="emitterFlow">Emitter flow per tree (L / hour)</label>
+        <label for="emitterFlow" data-i18n="plot_emitterFlow">Emitter flow per tree (L / hour)</label>
         <input type="number" id="emitterFlow" value="12.5" min="0" step="0.5">
       </div>
       <div class="field">
-        <label for="pumpCapacity">Pump capacity (L / hour)</label>
+        <label for="pumpCapacity" data-i18n="plot_pumpCapacity">Pump capacity (L / hour)</label>
         <input type="number" id="pumpCapacity" value="1500" min="0" step="50">
       </div>
     </div>
     <div class="row2">
       <div class="field">
-        <label for="maxHours">Max irrigation hours / day</label>
+        <label for="maxHours" data-i18n="plot_maxHours">Max irrigation hours / day</label>
         <input type="number" id="maxHours" value="4" min="0" step="0.5">
       </div>
       <div class="field">
-        <label for="efficiency">System efficiency (%)</label>
+        <label for="efficiency" data-i18n="plot_efficiency">System efficiency (%)</label>
         <input type="number" id="efficiency" value="90" min="1" max="100" step="1">
       </div>
     </div>
     <p class="computed-stat" id="feasibilityNote"></p>
-    <p class="computed-stat">= <strong id="dailyCapOut">6,000</strong> L/day ceiling, delivered at <strong id="effectiveFlowOut">1,500</strong> L/h</p>
+    <p class="computed-stat" id="dailyCapSummary"></p>
 
     <div class="field">
-      <label for="restday">Rest day — no irrigation</label>
+      <label for="restday" data-i18n="plot_restday">Rest day — no irrigation</label>
       <select id="restday">
-        <option value="6" selected>Saturday (Shabbat)</option>
-        <option value="0">Sunday</option>
-        <option value="1">Monday</option>
-        <option value="2">Tuesday</option>
-        <option value="3">Wednesday</option>
-        <option value="4">Thursday</option>
-        <option value="5">Friday</option>
-        <option value="-1">None</option>
+        <option value="6" selected data-i18n="plot_restSat">Saturday (Shabbat)</option>
+        <option value="0" data-i18n="day_sun">Sunday</option>
+        <option value="1" data-i18n="day_mon">Monday</option>
+        <option value="2" data-i18n="day_tue">Tuesday</option>
+        <option value="3" data-i18n="day_wed">Wednesday</option>
+        <option value="4" data-i18n="day_thu">Thursday</option>
+        <option value="5" data-i18n="day_fri">Friday</option>
+        <option value="-1" data-i18n="plot_restNone">None</option>
       </select>
     </div>
   </details>
 
   <div class="panel no-print" style="margin-bottom:14px;">
-    <p class="eyebrow"><span class="step-num">3</span> This week</p>
-    <h2>What's the forecast?</h2>
+    <p class="eyebrow"><span class="step-num">3</span> <span data-i18n="forecast_eyebrow">This week</span></p>
+    <h2 data-i18n="forecast_heading">What's the forecast?</h2>
 
     <div class="calendar">
       <div class="cal-header">
@@ -684,38 +684,38 @@
         <button type="button" class="secondary" id="calNextBtn">&rarr;</button>
       </div>
       <div class="cal-weekdays">
-        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        <span id="calWd0"></span><span id="calWd1"></span><span id="calWd2"></span><span id="calWd3"></span><span id="calWd4"></span><span id="calWd5"></span><span id="calWd6"></span>
       </div>
       <div class="cal-grid" id="calendarGrid"></div>
-      <p class="cal-legend"><span class="swatch"></span>Greyed dates have no forecast yet (too far ahead or too far in the past) — still pickable, but you'll enter that week by hand.</p>
+      <p class="cal-legend"><span class="swatch"></span><span data-i18n="cal_legend">Greyed dates have no forecast yet (too far ahead or too far in the past) — still pickable, but you'll enter that week by hand.</span></p>
     </div>
 
     <div class="source-toggle" role="group" aria-label="Forecast input method">
-      <button type="button" class="toggle-btn active" id="srcManualBtn">Enter by hand</button>
-      <button type="button" class="toggle-btn" id="srcLiveBtn">Pull live forecast</button>
+      <button type="button" class="toggle-btn active" id="srcManualBtn" data-i18n="forecast_manualBtn">Enter by hand</button>
+      <button type="button" class="toggle-btn" id="srcLiveBtn" data-i18n="forecast_liveBtn">Pull live forecast</button>
     </div>
 
     <div id="livePanel" class="live-panel" hidden>
       <div class="row2">
         <div class="field">
-          <label for="hotThreshold">Hot-day threshold (&deg;C max)</label>
+          <label for="hotThreshold" data-i18n-html="forecast_hotThreshold">Hot-day threshold (&deg;C max)</label>
           <input type="number" id="hotThreshold" value="32" min="0" step="1">
         </div>
         <div class="field">
-          <label for="rainThreshold">Rain-day threshold (mm)</label>
+          <label for="rainThreshold" data-i18n="forecast_rainThreshold">Rain-day threshold (mm)</label>
           <input type="number" id="rainThreshold" value="1" min="0" step="0.5">
         </div>
       </div>
-      <button type="button" id="fetchBtn">Fetch 7-day forecast for this location</button>
-      <p id="fetchStatus" class="fetch-status">Pulls daily and hourly data from Open-Meteo for the pin's coordinates. A day counts as rainy at or above the rain threshold, otherwise hot at or above the temperature threshold, otherwise normal. Edit any day below after pulling.</p>
+      <button type="button" id="fetchBtn" data-i18n="forecast_fetchBtn">Fetch 7-day forecast for this location</button>
+      <p id="fetchStatus" class="fetch-status" data-i18n="forecast_fetchStatus">Pulls daily and hourly data from Open-Meteo for the pin's coordinates. A day counts as rainy at or above the rain threshold, otherwise hot at or above the temperature threshold, otherwise normal. Edit any day below after pulling.</p>
     </div>
 
     <div id="dayCards"></div>
   </div>
 
   <div class="panel plan-panel" style="margin-bottom:14px;">
-    <p class="eyebrow"><span class="step-num">4</span> Output</p>
-    <h2>This week's irrigation plan</h2>
+    <p class="eyebrow"><span class="step-num">4</span> <span data-i18n="output_eyebrow">Output</span></p>
+    <h2 data-i18n="output_heading">This week's irrigation plan</h2>
     <div id="printSummary" class="print-only"></div>
     <p id="narrative" class="narrative"></p>
 
@@ -726,16 +726,16 @@
     <div id="warnings"></div>
 
     <div id="demandChartSection" style="margin-top:14px;">
-      <h3 style="margin:0 0 6px;font-size:0.95rem;font-family:var(--font-display);">Demand vs. applied (gross L / tree)</h3>
+      <h3 style="margin:0 0 6px;font-size:0.95rem;font-family:var(--font-display);" data-i18n="chart_heading">Demand vs. applied (gross L / tree)</h3>
       <div id="demandChartSvgWrap" role="img" aria-label=""></div>
-      <p style="font-size:0.78rem;color:var(--muted);margin:6px 0 0;">
+      <p style="font-size:0.78rem;color:var(--muted);margin:6px 0 0;" data-i18n="chart_caption">
         Both bars are gross figures — after system-efficiency losses, same basis as everywhere else on this page — so they're directly comparable. A day showing more applied than its own demand isn't an error: that's advance watering ahead of the rest day. The rest day's own bar shows what it would have needed, even though nothing is actually poured on it that day.
       </p>
       <details class="detail-toggle" style="margin-top:6px;">
-        <summary>View as table</summary>
+        <summary data-i18n="chart_viewAsTable">View as table</summary>
         <div class="tableScroll">
           <table id="demandChartTable">
-            <thead><tr><th>Day</th><th class="num">Demand (L/tree)</th><th class="num">Applied (L/tree)</th><th class="num">Deficit (L/tree)</th></tr></thead>
+            <thead><tr><th data-i18n="th_day">Day</th><th class="num" data-i18n="chart_th_demand">Demand (L/tree)</th><th class="num" data-i18n="chart_th_applied">Applied (L/tree)</th><th class="num" data-i18n="chart_th_deficit">Deficit (L/tree)</th></tr></thead>
             <tbody id="demandChartTableBody"></tbody>
           </table>
         </div>
@@ -743,18 +743,18 @@
     </div>
 
     <details class="detail-toggle">
-      <summary>Full table — liters per tree, timing, plot totals, and the comparison to last week</summary>
+      <summary data-i18n="sched_summary">Full table — liters per tree, timing, plot totals, and the comparison to last week</summary>
       <div class="tableScroll">
         <table id="scheduleTable">
           <thead>
             <tr>
-              <th>Day</th>
-              <th>Weather</th>
-              <th class="num">L / tree</th>
-              <th>Pump schedule</th>
-              <th class="num">Total poured (L)</th>
-              <th class="num">vs last week</th>
-              <th>Notes</th>
+              <th data-i18n="th_day">Day</th>
+              <th data-i18n="th_weather">Weather</th>
+              <th class="num" data-i18n="th_litersPerTree">L / tree</th>
+              <th data-i18n="th_pumpSchedule">Pump schedule</th>
+              <th class="num" data-i18n="th_totalPoured">Total poured (L)</th>
+              <th class="num" data-i18n="th_vsLastWeek">vs last week</th>
+              <th data-i18n="th_notes">Notes</th>
             </tr>
           </thead>
           <tbody id="scheduleBody"></tbody>
@@ -763,44 +763,44 @@
     </details>
 
     <div class="controls-bottom">
-      <button id="printBtn">Print / Save as PDF</button>
-      <button id="excelBtn">Download Excel (.xlsx)</button>
-      <button class="secondary" id="copyBtn">Copy schedule as text</button>
-      <button class="secondary" id="resetBtn">Reset to example week</button>
+      <button id="printBtn" data-i18n="btn_print">Print / Save as PDF</button>
+      <button id="excelBtn" data-i18n="btn_excel">Download Excel (.xlsx)</button>
+      <button class="secondary" id="copyBtn" data-i18n="btn_copy">Copy schedule as text</button>
+      <button class="secondary" id="resetBtn" data-i18n="btn_reset">Reset to example week</button>
     </div>
   </div>
 
   <details class="panel no-print" style="margin-bottom:14px;">
     <summary>
       <span>
-        <p class="eyebrow">Reference, optional</p>
-        <h2>Last week's schedule (L / tree)</h2>
+        <p class="eyebrow" data-i18n="ref_eyebrow">Reference, optional</p>
+        <h2 data-i18n-html="ref_heading">Last week's schedule (L / tree)</h2>
       </span>
     </summary>
-    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;">Used only to show how this week's plan differs from a schedule that already worked. Edit if last week looked different.</p>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n="ref_caption">Used only to show how this week's plan differs from a schedule that already worked. Edit if last week looked different.</p>
     <div id="refCards" class="ref-grid"></div>
   </details>
 
   <details class="panel no-print" style="margin-bottom:14px;">
     <summary>
       <span>
-        <p class="eyebrow">Progressive disclosure</p>
-        <h2>How this plan is calculated</h2>
+        <p class="eyebrow" data-i18n="formulas_eyebrow">Progressive disclosure</p>
+        <h2 data-i18n="formulas_heading">How this plan is calculated</h2>
       </span>
     </summary>
-    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;">Every figure below is read from THIS plan, right now — not a general description that can drift out of sync with what's actually on screen above.</p>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n="formulas_intro">Every figure below is read from THIS plan, right now — not a general description that can drift out of sync with what's actually on screen above.</p>
     <div id="formulasBody" style="font-size:0.85rem;line-height:1.65;"></div>
   </details>
 
   <footer>
-    <p><strong>How the numbers are built.</strong> Each day's water need starts from ET<sub>0</sub> (reference evapotranspiration) pulled live from Open-Meteo, which Open-Meteo itself derives from real temperature (not just a daily max — the actual curve), solar radiation (so a cloudy, overcast day pulls this down on its own, with no separate "cloud cover" step needed), humidity and wind. That single figure, scaled by the chosen variety's crop coefficient (Guatemalan types like Reed run higher than Mexican-race types like Bacon or Zutano) and by how well the soil at the pin holds moisture, is this plan's actual water need for the day. Only when no live pull has happened for a given day does it fall back to the hand-set baseline L/tree figure and a coarser hot/normal guess. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.</p>
-    <p><strong>Tree density vs. plot size.</strong> A single tree's own demand is set by its canopy, not by how much empty land happens to be around it, so each tree's land/water credit is capped at roughly a closed-canopy reference (40 trees/dunam — the default). Planted sparser than that, every tree still gets that full reference share and rainfall is credited the same way, so the plot's total use scales with how many trees are actually out there, not with land you aren't using. Planted denser than that, trees genuinely compete for a shrinking footprint, so each one's share — and rainfall credit — shrinks for real, and total use levels off at the land-area ceiling rather than climbing further. Assumes roughly 80% of any given rainfall reaches the root zone.</p>
-    <p><strong>What this does and doesn't cover.</strong> Temperature through the day, cloud cover and sun exposure all feed into ET<sub>0</sub> as above, so yes — they matter, and they're already in the number. A genuine heatwave shows up automatically as a spike in ET<sub>0</sub>, not as a separate flag. What isn't modeled: windblown dust or sandstorms (no free weather API reports this directly) and any physical damage to the canopy — those still need a human to notice and override by hand.</p>
-    <p><strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost — it only goes to a day actually shown in this week's view, on the correct side of the rest day: the day before gets an advance share (so the soil is already moist going into the dry day), the day after gets a make-up share, and either one is skipped if it isn't really in this week's displayed range — a rest day on Saturday, the default, has no "day after" inside a Sunday-start week, so advance watering onto Friday carries the whole job, and whatever that can't cover is disclosed as carrying into next week rather than wrongly credited to an earlier day. With the soil-water balance (below) switched on and fed by real ET&#8320;, the advance amount is sized to what the soil can actually hold and to what the rest day's own forecast still needs, not a blind half; otherwise it falls back to splitting evenly across whichever day(s) are actually in view. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely ("None") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's actual flow &times; max hours is capped at that ceiling and flagged.</p>
-    <p><strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.</p>
-    <p><strong>Ground sensor.</strong> Only "today's" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.</p>
-    <p><strong>Choosing dates.</strong> The calendar sets which 7-day window "this week" means. Greyed-out dates have no forecast (Open-Meteo's own live range is roughly 90 days back to 15 days ahead) — you can still pick them, but you'll enter that week's weather by hand.</p>
-    <p><strong>Data sources.</strong> Weather, modeled soil moisture and ET0: Open-Meteo (reliable in testing). Soil type: a built-in table of named regional surveys plus global desert / Mediterranean / rainforest climate belts — this is the primary source precisely because it makes no network call and so cannot go down. ISRIC SoilGrids is offered as an optional live upgrade for extra precision, but it has proven unreliable in repeated testing (anywhere from under a second to a full timeout on the same query) and should not be relied on. Map: OpenStreetMap. If any live source can't be reached, the affected field falls back to whatever you last set by hand.</p>
+    <p data-i18n-html="footer_numbers"></p>
+    <p data-i18n-html="footer_density"></p>
+    <p data-i18n-html="footer_coverage"></p>
+    <p data-i18n-html="footer_restday"></p>
+    <p data-i18n-html="footer_timing"></p>
+    <p data-i18n-html="footer_sensor"></p>
+    <p data-i18n-html="footer_dates"></p>
+    <p data-i18n-html="footer_sources"></p>
   </footer>
 </div>
 
@@ -2823,8 +2823,7 @@
     var density = Math.max(1, numOr("density", 40));
     var trees = Math.max(1, Math.round(area * density));
     var areaPerTree = 1000 / density;
-    $("treesOut").textContent = trees.toLocaleString();
-    $("spacingOut").textContent = areaPerTree.toFixed(0);
+    $("plotTreesSummary").innerHTML = t("plot_treesSummary", { trees: "<strong>" + trees.toLocaleString() + "</strong>", spacing: "<strong>" + areaPerTree.toFixed(0) + "</strong>" });
 
     // A mature tree's own water demand is set by its canopy size, not by how much empty land
     // happens to surround it — so below REFERENCE_DENSITY (roughly closed-canopy spacing), each
@@ -2872,15 +2871,16 @@
     var wholePlotFeasible = pumpCapacity <= 0 ? zoneDemandFlow <= 0 : zoneDemandFlow <= pumpCapacity;
     var effectiveFlow = pumpCapacity > 0 ? Math.min(zoneDemandFlow, pumpCapacity) : 0;
     $("feasibilityNote").textContent = wholePlotFeasible ?
-      "Watering all " + trees.toLocaleString() + " trees at once needs " + Math.round(zoneDemandFlow).toLocaleString() +
-        " L/h — within the pump's " + pumpCapacity.toLocaleString() + " L/h capacity." :
-      "Watering all " + trees.toLocaleString() + " trees at once would need " + Math.round(zoneDemandFlow).toLocaleString() +
-        " L/h, but the pump only supplies " + pumpCapacity.toLocaleString() + " L/h — whole-plot operation isn't feasible. " +
-        "This plan schedules at the pump's actual rate, which means it takes longer (or delivers less) than running everything " +
-        "at once would; splitting into roughly " + Math.ceil(zoneDemandFlow / Math.max(1, pumpCapacity)) + " sequential zones would close that gap, but no zones are configured here.";
-    $("effectiveFlowOut").textContent = Math.round(effectiveFlow).toLocaleString();
+      t("hw_feasible", { trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString() }) :
+      t("hw_infeasible", {
+        trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString(),
+        zones: Math.ceil(zoneDemandFlow / Math.max(1, pumpCapacity))
+      });
     var dailyCap = effectiveFlow * maxHours;
-    $("dailyCapOut").textContent = Math.round(dailyCap).toLocaleString();
+    $("dailyCapSummary").innerHTML = t("hw_dailyCapSummary", {
+      dailyCap: "<strong>" + Math.round(dailyCap).toLocaleString() + "</strong>",
+      flow: "<strong>" + Math.round(effectiveFlow).toLocaleString() + "</strong>"
+    });
     var restDay = Number($("restday").value);
 
     // ET demand minus real rainfall, never negative, never topped up beyond need. Computed for
@@ -3338,6 +3338,16 @@
   setSource(state.source);
   initMap();
   buildRefCards();
+
+  $("langToggle").addEventListener("click", function(){ setLang(LANG === "he" ? "en" : "he"); });
+  // Applies the persisted/default language's dir/lang attributes, static text, day names and
+  // button label before the first render/paint — same ordering reasoning as the theme toggle's
+  // own head-of-document script (no flash of the other language first).
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = LANG === "he" ? "rtl" : "ltr";
+  applyDayNames();
+  applyStaticTranslations();
+  renderLangButton();
 
   // Land on the deterministic assignment demo by default, in both the first-visit and returning-
   // visit cases — live field data is opt-in via the Field planning button, never automatic, which is
