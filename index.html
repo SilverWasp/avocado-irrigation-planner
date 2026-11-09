@@ -85,32 +85,50 @@
   /* ---------- Animated weather background (art direction borrowed from the Hula Valley
      reference build: a full-viewport cartoon sun/cloud/rain scene behind everything, driven by
      this week's actual weather mix via updateWeatherBackground() — our own data, their look). */
+  /* Four pastel scenes (never the saturated/solid colors the Hula Valley reference used — kept
+     deliberately soft so the scene reads as weather, not as a loud wall of color behind the
+     frosted panels). updateWeatherBackground() below picks one of four CSS classes rather than
+     setting any color inline, so the whole palette lives here, in one place. */
   #weatherBg{
     position:fixed; inset:0; z-index:-1; overflow:hidden;
-    background:#bae6fd;
-    transition:background-color 0.6s ease;
+    background:linear-gradient(to bottom,#dbeafe,#eff6ff);
+    transition:background 1s ease;
   }
   @media print{ #weatherBg{display:none !important;} }
+  #weatherBg.scene-normal{ background:linear-gradient(to bottom,#dbeafe,#eff6ff); }
+  #weatherBg.scene-sunny{ background:linear-gradient(to bottom,#bfe3fb,#eef9ff); }
+  #weatherBg.scene-heatwave{ background:linear-gradient(to bottom,#fed7aa,#fff7ed); }
+  #weatherBg.scene-rainy{ background:linear-gradient(to bottom,#cbd5e1,#e2e8f0); }
+
   .sun-cartoon{
-    position:absolute; top:8%; right:8%; width:130px; height:130px;
-    background:#FFD700; border-radius:50%;
-    box-shadow:0 0 60px #FF8C00, inset 0 0 20px #FFA500;
-    animation:pulseSun 3s infinite alternate;
+    position:absolute; top:8%; right:8%; width:120px; height:120px;
+    background:radial-gradient(circle at 35% 35%,#fef9c3,#fde68a 65%,#fcd34d);
+    border-radius:50%;
+    box-shadow:0 0 36px rgba(252,211,77,0.55);
+    animation:pulseSun 4s infinite alternate;
   }
-  .sun-face{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:48px; }
-  @keyframes pulseSun{ 0%{transform:scale(1);} 100%{transform:scale(1.06);} }
+  .sun-cartoon.heatwave{
+    width:190px; height:190px;
+    background:radial-gradient(circle at 35% 35%,#fef3c7,#fbbf24 60%,#f97316);
+    box-shadow:0 0 70px rgba(249,115,22,0.55);
+  }
+  .sun-face{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:44px; }
+  @keyframes pulseSun{ 0%{transform:scale(1);} 100%{transform:scale(1.05);} }
+
   .cloud-cartoon{
-    position:absolute; background:#fff; border-radius:50px; opacity:0.9;
-    box-shadow:0 8px 18px rgba(0,0,0,0.08); animation:floatCloud linear infinite;
+    position:absolute; background:#fff; border-radius:50px; opacity:0.92;
+    box-shadow:0 8px 18px rgba(0,0,0,0.06); animation:floatCloud linear infinite;
   }
   .cloud-cartoon::before{
-    content:""; position:absolute; background:#fff; border-radius:50%;
-    width:60%; height:100%; top:-40%; left:20%;
+    content:""; position:absolute; background:inherit;
+    width:60%; height:100%; top:-40%; left:20%; border-radius:50%;
   }
+  .cloud-cartoon.grey{ background:#94a3b8; opacity:0.85; box-shadow:0 8px 18px rgba(0,0,0,0.1); }
   @keyframes floatCloud{ 0%{transform:translateX(-220px);} 100%{transform:translateX(110vw);} }
+
   .rain-drop{
-    position:absolute; width:4px; height:18px; background:#38bdf8;
-    border-radius:50%; opacity:0.85; animation:fallRain linear infinite;
+    position:absolute; width:3px; height:16px; background:#60a5fa;
+    border-radius:50%; opacity:0.7; animation:fallRain linear infinite;
   }
   @keyframes fallRain{ 0%{transform:translateY(-20px);} 100%{transform:translateY(110vh);} }
 
@@ -384,11 +402,14 @@
   .cal-legend{font-size:0.72rem;color:var(--muted);margin-top:8px;line-height:1.5;}
   .cal-legend .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--border);margin-right:4px;vertical-align:middle;}
 
-  .tableScroll{overflow-x:auto;margin-top:18px;border:1px solid var(--border);border-radius:14px;}
-  table{width:100%;border-collapse:collapse;min-width:720px;background:var(--surface);}
+  .tableScroll{
+    overflow-x:auto; margin-top:18px; border:1px solid var(--border); border-radius:16px;
+    background:var(--panel-bg); backdrop-filter:blur(var(--panel-blur)); -webkit-backdrop-filter:blur(var(--panel-blur));
+  }
+  table{width:100%;border-collapse:collapse;min-width:720px;background:transparent;}
   th,td{
     text-align:left;
-    padding:10px 14px;
+    padding:11px 14px;
     border-bottom:1px solid var(--border);
     font-size:0.88rem;
     vertical-align:top;
@@ -398,10 +419,12 @@
     font-size:0.68rem;
     letter-spacing:0.06em;
     text-transform:uppercase;
-    color:var(--muted);
-    background:var(--bg);
+    color:var(--avocado);
+    background:rgba(22,163,74,0.08);
   }
   td.num, th.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  tbody tr:nth-child(even){background:rgba(100,116,139,0.05);}
+  tbody tr:hover{background:rgba(14,165,233,0.08);}
   tr:last-child td{border-bottom:none;}
   .pill{
     display:inline-flex;
@@ -474,7 +497,12 @@
     color:#fff;
     cursor:pointer;
     transition:filter 0.15s ease, transform 0.05s ease;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
   }
+  button i{flex:0 0 auto;width:15px;height:15px;}
   :root[data-theme="dark"] button{color:#06240f;}
   @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) button{color:#06240f;} }
   button:hover:not(:disabled){filter:brightness(1.08);}
@@ -564,7 +592,8 @@
     .narrative{background:#fff;border-color:#999;}
     table{min-width:0;}
     th{background:#eee;color:#000;}
-    .tableScroll{overflow:visible;border-color:#999;}
+    .tableScroll{overflow:visible;border-color:#999;background:#fff;backdrop-filter:none;}
+    tbody tr:nth-child(even), tbody tr:hover{background:transparent;}
     .detail-toggle summary{display:none;}
     .plan-cards{display:none;} /* the full table below covers the same ground, more completely, on paper */
     .print-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:0.85rem;margin-bottom:10px;}
@@ -597,8 +626,8 @@
   <div class="panel no-print" style="margin-bottom:14px;">
     <p class="eyebrow" data-i18n="mode_eyebrow">Mode</p>
     <div class="source-toggle" role="group" aria-label="Planning mode">
-      <button type="button" class="toggle-btn active" id="modeAssignmentBtn" data-i18n="mode_assignmentBtn">Assignment example</button>
-      <button type="button" class="toggle-btn" id="modeFieldBtn" data-i18n="mode_fieldBtn">Field planning</button>
+      <button type="button" class="toggle-btn active" id="modeAssignmentBtn"><i data-lucide="clipboard-list"></i> <span data-i18n="mode_assignmentBtn">Assignment example</span></button>
+      <button type="button" class="toggle-btn" id="modeFieldBtn"><i data-lucide="map"></i> <span data-i18n="mode_fieldBtn">Field planning</span></button>
     </div>
     <p id="assignmentNote" class="fetch-status" style="margin-top:8px;" data-i18n="mode_assignmentNote">
       Fixed, offline demonstration: exactly 2 hot / 1 rainy / 4 normal days, dated to this week's Sunday. Live forecast is disabled here on purpose — the brief it comes from is never meant to be silently replaced by real weather. Switch to Field planning for a real dated week with live data.
@@ -619,7 +648,7 @@
         <label for="lonInput" data-i18n="loc_lonLabel">Longitude</label>
         <input type="number" id="lonInput" step="0.001">
       </div>
-      <button type="button" class="secondary" id="refreshLocationBtn" data-i18n="loc_refreshBtn">Refresh data for this spot</button>
+      <button type="button" class="secondary" id="refreshLocationBtn"><i data-lucide="refresh-cw"></i> <span data-i18n="loc_refreshBtn">Refresh data for this spot</span></button>
     </div>
 
     <div class="soil-row">
@@ -631,7 +660,7 @@
           <option value="1.15" data-i18n="loc_soilSandy">Sandy / fast-draining</option>
         </select>
       </div>
-      <button type="button" class="secondary" id="detectSoilBtn" data-i18n="loc_detectSoilBtn">Try precise live lookup (often unavailable)</button>
+      <button type="button" class="secondary" id="detectSoilBtn"><i data-lucide="crosshair"></i> <span data-i18n="loc_detectSoilBtn">Try precise live lookup (often unavailable)</span></button>
     </div>
     <p id="soilStatus" class="fetch-status" data-i18n="loc_soilStatus">Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.</p>
   </div>
@@ -799,9 +828,9 @@
 
     <div class="calendar">
       <div class="cal-header">
-        <button type="button" class="secondary" id="calPrevBtn">&larr;</button>
+        <button type="button" class="secondary" id="calPrevBtn"><i data-lucide="chevron-left"></i></button>
         <span class="cal-label" id="calLabel"></span>
-        <button type="button" class="secondary" id="calNextBtn">&rarr;</button>
+        <button type="button" class="secondary" id="calNextBtn"><i data-lucide="chevron-right"></i></button>
       </div>
       <div class="cal-weekdays">
         <span id="calWd0"></span><span id="calWd1"></span><span id="calWd2"></span><span id="calWd3"></span><span id="calWd4"></span><span id="calWd5"></span><span id="calWd6"></span>
@@ -811,8 +840,8 @@
     </div>
 
     <div class="source-toggle" role="group" aria-label="Forecast input method">
-      <button type="button" class="toggle-btn active" id="srcManualBtn" data-i18n="forecast_manualBtn">Enter by hand</button>
-      <button type="button" class="toggle-btn" id="srcLiveBtn" data-i18n="forecast_liveBtn">Pull live forecast</button>
+      <button type="button" class="toggle-btn active" id="srcManualBtn"><i data-lucide="pencil"></i> <span data-i18n="forecast_manualBtn">Enter by hand</span></button>
+      <button type="button" class="toggle-btn" id="srcLiveBtn"><i data-lucide="radio"></i> <span data-i18n="forecast_liveBtn">Pull live forecast</span></button>
     </div>
 
     <div id="livePanel" class="live-panel" hidden>
@@ -826,7 +855,7 @@
           <input type="number" id="rainThreshold" value="1" min="0" step="0.5">
         </div>
       </div>
-      <button type="button" id="fetchBtn" data-i18n="forecast_fetchBtn">Fetch 7-day forecast for this location</button>
+      <button type="button" id="fetchBtn"><i data-lucide="download-cloud"></i> <span data-i18n="forecast_fetchBtn">Fetch 7-day forecast for this location</span></button>
       <p id="fetchStatus" class="fetch-status" data-i18n="forecast_fetchStatus">Pulls daily and hourly data from Open-Meteo for the pin's coordinates. A day counts as rainy at or above the rain threshold, otherwise hot at or above the temperature threshold, otherwise normal. Edit any day below after pulling.</p>
     </div>
 
@@ -883,10 +912,10 @@
     </details>
 
     <div class="controls-bottom">
-      <button id="printBtn" data-i18n="btn_print">Print / Save as PDF</button>
-      <button id="excelBtn" data-i18n="btn_excel">Download Excel (.xlsx)</button>
-      <button class="secondary" id="copyBtn" data-i18n="btn_copy">Copy schedule as text</button>
-      <button class="secondary" id="resetBtn" data-i18n="btn_reset">Reset to example week</button>
+      <button id="printBtn"><i data-lucide="printer"></i> <span data-i18n="btn_print">Print / Save as PDF</span></button>
+      <button id="excelBtn"><i data-lucide="file-spreadsheet"></i> <span data-i18n="btn_excel">Download Excel (.xlsx)</span></button>
+      <button class="secondary" id="copyBtn"><i data-lucide="copy"></i> <span data-i18n="btn_copy">Copy schedule as text</span></button>
+      <button class="secondary" id="resetBtn"><i data-lucide="rotate-ccw"></i> <span data-i18n="btn_reset">Reset to example week</span></button>
     </div>
   </div>
 
@@ -3092,9 +3121,9 @@
 
   // Purely cosmetic (art direction only — no bearing on any computation above): a full-viewport
   // cartoon weather scene behind every panel, driven by THIS WEEK'S OWN weather mix (dayAt(), the
-  // same per-day record the schedule itself reads), not a separate/parallel data source. Rain wins
-  // if it's at least as common as heat; heat wins if it's strictly more common; otherwise a calm
-  // cloudy scene plays, matching the "driest of hot/rain/else" framing used elsewhere in the app.
+  // same per-day record the schedule itself reads), not a separate/parallel data source. Four
+  // scenes from the three underlying weather categories — rainy, sunny and a distinct, more
+  // intense "heatwave" once hot days actually dominate the week, not just appear once or twice.
   function updateWeatherBackground(){
     var bg = $("weatherBg");
     if(!bg) return;
@@ -3105,9 +3134,27 @@
       if(w === "rainy") rainyCount++;
     }
     bg.innerHTML = "";
-    if(rainyCount > 0 && rainyCount >= hotCount){
-      bg.style.backgroundColor = "#64748b";
-      for(var r = 0; r < 50; r++){
+    function addClouds(n, grey, maxTopVh){
+      for(var c = 0; c < n; c++){
+        var cloud = document.createElement("div");
+        cloud.className = grey ? "cloud-cartoon grey" : "cloud-cartoon";
+        var cw = Math.random() * 80 + 100;
+        cloud.style.width = cw + "px";
+        cloud.style.height = (cw / 2.5) + "px";
+        cloud.style.top = (Math.random() * maxTopVh) + "vh";
+        cloud.style.animationDuration = (Math.random() * 25 + 20) + "s";
+        cloud.style.animationDelay = (Math.random() * -40) + "s";
+        bg.appendChild(cloud);
+      }
+    }
+    function addSun(heatwave){
+      var sun = document.createElement("div");
+      sun.className = heatwave ? "sun-cartoon heatwave" : "sun-cartoon";
+      sun.innerHTML = '<div class="sun-face">' + (heatwave ? "🥵" : "😎") + '</div>';
+      bg.appendChild(sun);
+    }
+    function addRain(n){
+      for(var r = 0; r < n; r++){
         var drop = document.createElement("div");
         drop.className = "rain-drop";
         drop.style.left = (Math.random() * 100) + "vw";
@@ -3115,25 +3162,26 @@
         drop.style.animationDuration = (Math.random() * 0.5 + 0.6) + "s";
         bg.appendChild(drop);
       }
+    }
+    if(rainyCount > 0 && rainyCount >= hotCount){
+      // Rainy: soft grey-blue sky, a few grey clouds, falling rain.
+      bg.className = "scene-rainy";
+      addClouds(3, true, 20);
+      addRain(45);
+    } else if(hotCount >= 4){
+      // Heatwave: most of the week is hot, not just one day — a bigger, more orange sun, no
+      // clouds at all, and a warmer sky than an ordinary sunny day.
+      bg.className = "scene-heatwave";
+      addSun(true);
     } else if(hotCount > 0){
-      bg.style.backgroundColor = "#fde047";
-      var sun = document.createElement("div");
-      sun.className = "sun-cartoon";
-      sun.innerHTML = '<div class="sun-face">😎</div>';
-      bg.appendChild(sun);
+      // Sunny: blue sky, one real sun, at most a thin cloud or two.
+      bg.className = "scene-sunny";
+      addSun(false);
+      addClouds(1, false, 12);
     } else {
-      bg.style.backgroundColor = "#bae6fd";
-      for(var c = 0; c < 5; c++){
-        var cloud = document.createElement("div");
-        cloud.className = "cloud-cartoon";
-        var cw = Math.random() * 80 + 100;
-        cloud.style.width = cw + "px";
-        cloud.style.height = (cw / 2.5) + "px";
-        cloud.style.top = (Math.random() * 30) + "vh";
-        cloud.style.animationDuration = (Math.random() * 25 + 20) + "s";
-        cloud.style.animationDelay = (Math.random() * -40) + "s";
-        bg.appendChild(cloud);
-      }
+      // Normal: calm, mostly cloudy blue sky, no sun drawn.
+      bg.className = "scene-normal";
+      addClouds(5, false, 30);
     }
   }
 
