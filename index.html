@@ -1088,6 +1088,7 @@
       weather_hot: "Hot", weather_normal: "Normal", weather_rainy: "Rainy",
       note_rest: "Rest day — no irrigation.",
       note_capped: "Capped at the pump's flow rate for the window; make up any shortfall the next irrigation day.",
+      note_midnightCapped: "Capped so irrigation finishes before midnight, ahead of the rest day — running the full target duration would have bled into the rest day's own date. Make up any shortfall the next irrigation day.",
       note_blocked: "Blocked — this day has real demand, but whole-plot operation isn't hydraulically feasible and no confirmed zone configuration is in place. Nothing is scheduled here until that's resolved above.",
       note_rainSkip: "Rainfall ({mm}mm) already covers the day's need — skipped to avoid over-watering and root rot.",
       note_rainCredit: "Rainfall ({mm}mm) credited against today's need — topped up only the rest, never beyond it.",
@@ -1172,11 +1173,13 @@
       sum_neverExceeded: "never exceeded this week",
       warn_budgetExceeded: "Raw demand ({raw} L) exceeded the weekly budget, so every irrigation day was scaled down by {pct}%.",
       warn_pumpLimited: "Pump flow limited irrigation on: {days}. Trees on those days received less than the model's target — plan a top-up on the following irrigation day.",
+      warn_midnightCapped: "Finishing before midnight (ahead of the rest day) limited irrigation on: {days}. Trees on those days received less than the model's target — plan a top-up on the following irrigation day.",
 
       sched_noIrrigation: "No irrigation",
       sched_skipNoWatering: "Skip — no watering needed",
       sched_blocked: "Blocked — hardware configuration required",
       sched_defaultSlot: "default slot",
+      sched_windowConflict: "no window fits before the rest day",
       sched_sensorAdjusted: "Adjusted using your sensor reading for today.",
       sched_compBoth: "That water isn't lost — split between {beforeDay} and {afterDay}.",
       sched_compBeforeOnly: "That water isn't lost — advanced onto {beforeDay}.",
@@ -1396,6 +1399,7 @@
       weather_hot: "חם", weather_normal: "רגיל", weather_rainy: "גשום",
       note_rest: "יום מנוחה — ללא השקיה.",
       note_capped: "מוגבל לקצב הזרימה של המשאבה עבור החלון; השלימו כל גירעון ביום ההשקיה הבא.",
+      note_midnightCapped: "מוגבל כדי שההשקיה תסתיים לפני חצות, לפני יום המנוחה — הפעלה למשך הזמן המלא הייתה חולשת לתאריך של יום המנוחה עצמו. השלימו כל גירעון ביום ההשקיה הבא.",
       note_blocked: "חסום — ליום הזה יש ביקוש אמיתי, אך הפעלת כל החלקה אינה אפשרית הידראולית ואין תצורת אזורים מאושרת. שום דבר לא מתוזמן כאן עד שזה ייפתר למעלה.",
       note_rainSkip: "הגשם ({mm} מ\"מ) כבר מכסה את צורך היום — דולג כדי למנוע עודף השקיה וריקבון שורשים.",
       note_rainCredit: "הגשם ({mm} מ\"מ) זוכה כנגד הצורך של היום — הושלם רק השארית, לעולם לא מעבר לכך.",
@@ -1480,11 +1484,13 @@
       sum_neverExceeded: "לא נחצה השבוע",
       warn_budgetExceeded: "הביקוש הגולמי ({raw} ליטר) חרג מהתקציב השבועי, כך שכל יום השקיה הוקטן ב-{pct}%.",
       warn_pumpLimited: "זרימת המשאבה הגבילה השקיה ב: {days}. העצים בימים אלה קיבלו פחות מיעד המודל — תכננו השלמה ביום ההשקיה הבא.",
+      warn_midnightCapped: "סיום לפני חצות (לפני יום המנוחה) הגביל השקיה ב: {days}. העצים בימים אלה קיבלו פחות מיעד המודל — תכננו השלמה ביום ההשקיה הבא.",
 
       sched_noIrrigation: "ללא השקיה",
       sched_skipNoWatering: "דילוג — לא נדרשת השקיה",
       sched_blocked: "חסום — נדרשת הגדרת חומרה",
       sched_defaultSlot: "חלון ברירת מחדל",
+      sched_windowConflict: "אין חלון שמתאים לפני יום המנוחה",
       sched_sensorAdjusted: "הותאם לפי קריאת החיישן שלכם להיום.",
       sched_compBoth: "המים האלה לא אבודים — מחולקים בין {beforeDay} ל-{afterDay}.",
       sched_compBeforeOnly: "המים האלה לא אבודים — מוקדמים ל-{beforeDay}.",
@@ -2278,30 +2284,48 @@
   }
 
   // ---------- Irrigation timing ----------
+  // The three fixed daily slots this app offers. Declared once so the "earliest a day could ever
+  // start" (4:00, used below by dailyCapForDay to pre-limit the day before a rest day) can never
+  // drift out of sync with the candidate list pickIrrigationWindow actually searches.
+  var IRRIGATION_WINDOW_OPTS = [
+    { label: "early morning", start: 4, end: 8 },
+    { label: "evening", start: 18, end: 22 },
+    { label: "late night", start: 22, end: 24 }
+  ];
   function pickIrrigationWindow(hourlyArr, hoursNeeded, mustFinishByMidnight){
-    if(!hourlyArr){
-      return { label: "early morning (default)", start: 5, end: 7, dataBacked: false };
-    }
     function avg(s, e){
+      if(!hourlyArr) return 0;
       var sum = 0;
       for(var h = s; h < e; h++) sum += hourlyArr[h] || 0;
       return sum / (e - s);
     }
-    var opts = [
-      { label: "early morning", start: 4, end: 8 },
-      { label: "evening", start: 18, end: 22 },
-      { label: "late night", start: 22, end: 24 }
-    ];
-    opts.forEach(function(o){ o.avg = avg(o.start, o.end); });
-    opts.sort(function(a, b){ return a.avg - b.avg; });
+    var opts = IRRIGATION_WINDOW_OPTS.map(function(o){ return { label: o.label, start: o.start, end: o.end, avg: avg(o.start, o.end) }; });
+    // Rank by measured dryness only when there's real hourly data to rank by — without it every
+    // avg() above is the same meaningless 0, so leave the three slots in their declared order
+    // instead of a "sort" that would just be relabeling them at random. Audit P0.5's own
+    // reproduction (formatWindowLong(pickIrrigationWindow(null, 20, true), 20) => "Friday 05:00
+    // through Saturday 01:00") was caused by this whole function returning a hardcoded {start:5}
+    // fallback BEFORE ever reaching the midnight-safety filter below when hourlyArr was null —
+    // confirmed by tracing the old code with these exact arguments. The no-data path now goes
+    // through the identical candidate list and filter as the data-backed path; only the ranking
+    // step (which needs real numbers to mean anything) is skipped.
+    if(hourlyArr) opts.sort(function(a, b){ return a.avg - b.avg; });
     // The day right before a rest day must not let irrigation run past midnight into the rest day's
     // own calendar date — a Friday-night start that keeps flowing past 24:00 is watering on Saturday
     // in substance even though it began on Friday (brief T04). Drop any candidate window whose end,
     // given how long this day's volume will actually take, would cross that boundary.
     var needed = Math.max(hoursNeeded || 0, 1/60);
     var safeOpts = mustFinishByMidnight ? opts.filter(function(o){ return o.start + needed <= 24; }) : opts;
-    var best = (safeOpts.length ? safeOpts : opts)[0];
-    return { label: best.label, start: best.start, end: best.end, dataBacked: true };
+    // Nothing fitting is a real scheduling conflict, not something to paper over by quietly handing
+    // back an unsafe candidate anyway (audit P0.5: "if no candidate is safe, it falls back to
+    // unsafe candidates... never silently choose an unsafe fallback"). fits:false tells the caller
+    // this day's duration itself needs reducing, not just its clock display; dailyCapForDay below
+    // keeps this unreachable in practice by never letting hoursNeeded exceed what the earliest
+    // candidate (4:00) can still finish by midnight, but the function stays correct on its own
+    // regardless of what any particular caller already guarantees.
+    var fits = safeOpts.length > 0;
+    var best = (fits ? safeOpts : opts)[0];
+    return { label: best.label, start: best.start, end: best.end, dataBacked: !!hourlyArr, fits: fits };
   }
 
   // The window must always span enough time to actually deliver the allocated volume — it must
@@ -2924,9 +2948,10 @@
     return '<span class="pill normal">' + t("weather_normal") + '</span>';
   }
 
-  function noteFor(w, isRest, capped, litersPerTree, rainMm, blocked){
+  function noteFor(w, isRest, capped, litersPerTree, rainMm, blocked, midnightCapped){
     if(isRest) return t("note_rest");
     if(blocked) return t("note_blocked");
+    if(midnightCapped) return t("note_midnightCapped");
     if(capped) return t("note_capped");
     if(rainMm > 0 && litersPerTree <= 0){
       return t("note_rainSkip", { mm: rainMm });
@@ -3080,6 +3105,13 @@
     var efficiencyPct = Math.max(1, numOr("efficiency", 90)); // 0% would make every gross figure infinite
     var efficiency = efficiencyPct / 100;
 
+    // Read early (moved ahead of the dailyCap/zone block below) so dailyCapForDay can already
+    // know which single day is the one right before a rest day — audit P0.5: a day's own ceiling
+    // must never grant more runtime than the earliest fixed slot (4:00, IRRIGATION_WINDOW_OPTS)
+    // could still finish by midnight, same T04 boundary pickIrrigationWindow itself enforces.
+    var restDay = Number($("restday").value);
+    var dayBeforeRest = restDay >= 0 && state.weekDates ? findWeekdayForISO(addDaysISO(state.weekDates[restDay], -1)) : -1;
+
     // Watering every tree at once needs trees x emitterFlow L/h. If that exceeds the pump, whole-
     // plot operation is a hard infeasibility, not a soft warning — audit P0.3: never treat
     // min(emitter demand, pump capacity) as proof every emitter operates normally. This app does
@@ -3133,6 +3165,15 @@
       effectiveFlow = pumpCapacity > 0 ? Math.min(zoneDemandFlow, pumpCapacity) : 0;
       dailyCap = effectiveFlow * maxHours;
     }
+    // The day right before a rest day gets a day-specific ceiling, never more than the earliest
+    // fixed slot (IRRIGATION_WINDOW_OPTS[0], 4:00) could still finish by midnight — audit P0.5: a
+    // day's deliverable volume must never imply more runtime than any legal window could actually
+    // provide without bleeding into the rest day. Every other day keeps the plain configured cap.
+    function dailyCapForDay(i){
+      if(i !== dayBeforeRest || effectiveFlow <= 0) return dailyCap;
+      var midnightSafeHours = 24 - IRRIGATION_WINDOW_OPTS[0].start;
+      return Math.min(dailyCap, effectiveFlow * midnightSafeHours);
+    }
 
     $("feasibilityNote").textContent = wholePlotFeasible ? t("hw_feasible", {
       trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString()
@@ -3148,7 +3189,6 @@
         dailyCap: "<strong>" + Math.round(dailyCap).toLocaleString() + "</strong>",
         flow: "<strong>" + Math.round(effectiveFlow).toLocaleString() + "</strong>"
       });
-    var restDay = Number($("restday").value);
 
     // ET demand minus real rainfall, never negative, never topped up beyond need. Computed for
     // every day regardless of rest-day status, so the rest day's own unmet need is knowable —
@@ -3324,12 +3364,18 @@
     var litersPerTreeFloat = raw.map(function(l){ return l * scale; });
     var plotTotalFloat = litersPerTreeFloat.map(function(l){ return l * trees; });
     var cappedDays = [];
+    var midnightCappedDays = [];
 
     plotTotalFloat = plotTotalFloat.map(function(total, i){
-      if(total > dailyCap){
-        cappedDays.push(DAYS[i]);
-        litersPerTreeFloat[i] = dailyCap / trees;
-        return dailyCap;
+      var cap = dailyCapForDay(i);
+      if(total > cap){
+        if(i === dayBeforeRest && cap < dailyCap){
+          midnightCappedDays.push(DAYS[i]);
+        } else {
+          cappedDays.push(DAYS[i]);
+        }
+        litersPerTreeFloat[i] = cap / trees;
+        return cap;
       }
       return total;
     });
@@ -3356,12 +3402,10 @@
       return plotTotal[i] > 0 && effectiveFlow > 0 ? plotTotal[i] / effectiveFlow : 0;
     });
 
-    // Chronological adjacency (findWeekdayForISO), not weekday-position +-1 — same P0.1 reasoning
-    // as the rest-day compensation block above: restDay's weekday-position - 1 is only the
-    // chronologically preceding day when the displayed week starts on Sunday. Leaving this as
-    // modulo arithmetic would have let the T04 midnight-crossing guard below silently point at
-    // the wrong day for any other week start.
-    var dayBeforeRest = restDay >= 0 && state.weekDates ? findWeekdayForISO(addDaysISO(state.weekDates[restDay], -1)) : -1;
+    // dayBeforeRest was already computed above (ahead of dailyCapForDay, which needs it too) via
+    // chronological adjacency (findWeekdayForISO) rather than weekday-position +-1 — same P0.1
+    // reasoning as the rest-day compensation block above: restDay's weekday-position - 1 is only
+    // the chronologically preceding day when the displayed week starts on Sunday.
     var windows = DAYS.map(function(_, i){
       if(i === restDay || litersPerTree[i] <= 0) return null;
       // Assignment mode is fully offline/deterministic (brief: "never auto-replace the assignment
@@ -3409,8 +3453,9 @@
       var name = DAYS[i];
       var isRest = i === restDay;
       var capped = cappedDays.indexOf(name) !== -1;
+      var midnightCapped = midnightCappedDays.indexOf(name) !== -1;
       var div = document.createElement("div");
-      div.className = "plan-card" + (isRest ? " rest" : "") + (capped ? " capped" : "");
+      div.className = "plan-card" + (isRest ? " rest" : "") + (capped || midnightCapped ? " capped" : "");
       var dateSub = state.weekDates && state.weekDates[i] ? '<span class="pc-date">' + formatDate(state.weekDates[i]) + '</span>' : "";
       var blockedHere = hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01;
       var whenHtml = blockedHere ? '<span class="pc-when" style="color:var(--warn);font-weight:600;">' + t("sched_blocked") + '</span>' :
@@ -3448,6 +3493,9 @@
     if(cappedDays.length){
       warningItems.push(t("warn_pumpLimited", { days: cappedDays.join(", ") }));
     }
+    if(midnightCappedDays.length){
+      warningItems.push(t("warn_midnightCapped", { days: midnightCappedDays.join(", ") }));
+    }
     if(warningItems.length){
       warnEl.innerHTML = '<ul class="warning-list">' + warningItems.map(function(w){ return "<li>" + w + "</li>"; }).join("") + '</ul>';
     } else {
@@ -3460,6 +3508,7 @@
       var name = DAYS[i];
       var isRest = i === restDay;
       var capped = cappedDays.indexOf(name) !== -1;
+      var midnightCapped = midnightCappedDays.indexOf(name) !== -1;
       var delta = litersPerTree[i] - (state.ref[i] || 0);
       var deltaStr = (delta >= 0 ? "+" : "") + Math.round(delta) + " L";
       var barPct = maxLiters > 0 ? Math.round((litersPerTree[i]/maxLiters)*100) : 0;
@@ -3474,7 +3523,13 @@
         (hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01) ? t("sched_blocked") :
         litersPerTree[i] <= 0 ? t("sched_skipNoWatering") :
         formatWindowLong(windows[i], hoursNeeded[i]) +
-        (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(" + t("sched_defaultSlot") + ")</span>");
+        (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(" + t("sched_defaultSlot") + ")</span>") +
+        // Defensive display only — dailyCapForDay already keeps this day's hoursNeeded within what
+        // the earliest slot can finish by midnight, so pickIrrigationWindow should never actually
+        // report fits:false here. If it ever does (e.g. a future change to the candidate list or
+        // the cap), show that plainly rather than silently rendering a time that crosses into the
+        // rest day as if it were a normal, legal window (audit P0.5).
+        (windows[i].fits === false ? " <strong style=\"color:var(--warn);\">" + t("sched_windowConflict") + "</strong>" : "");
 
       var tr = document.createElement("tr");
       tr.innerHTML =
@@ -3485,7 +3540,7 @@
         "<td>" + whenCell + "</td>" +
         '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
         '<td class="num">' + deltaStr + "</td>" +
-        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0, hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01) +
+        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0, hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01, midnightCapped) +
           (isTodaySlot(i) && sensor.enabled ? " <em>" + t("sched_sensorAdjusted") + "</em>" : "") +
           (compensation && isRest && compensation.beforeIdx !== -1 && compensation.afterIdx !== -1 ?
             " <em>" + t("sched_compBoth", { beforeDay: DAYS[compensation.beforeIdx], afterDay: DAYS[compensation.afterIdx] }) + "</em>" :
