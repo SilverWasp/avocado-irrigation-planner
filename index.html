@@ -18,51 +18,61 @@
 <style>
   /* layout: location map -> plot/pump limits -> forecast -> output plan, all stacked single-column panels */
   :root{
-    --bg:#f5f0e4;
+    --bg:#f8fafc;
     --surface:#ffffff;
-    --ink:#22281f;
-    --muted:#5c6a56;
-    --avocado:#3c5a40;
-    --soil:#8a5f3c;
-    --water:#2a7a94;
-    --warn:#b5482f;
-    --border:rgba(34,40,31,0.14);
-    --font-display:'Fraunces',"Iowan Old Style",serif;
-    --font-body:'Public Sans',-apple-system,sans-serif;
+    --ink:#0f172a;
+    --muted:#64748b;
+    --avocado:#16a34a;
+    --soil:#b45309;
+    --water:#0ea5e9;
+    --warn:#e11d48;
+    --border:rgba(100,116,139,0.18);
+    --panel-bg:rgba(255,255,255,0.86);
+    --panel-blur:14px;
+    --header-grad:linear-gradient(110deg,#14532d,#15803d 55%,#0f172a);
+    --font-display:'Inter','Rubik',-apple-system,sans-serif;
+    --font-body:'Inter','Rubik',-apple-system,sans-serif;
     --font-mono:'IBM Plex Mono',ui-monospace,monospace;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#181c16;
-      --surface:#222820;
-      --ink:#eef0e8;
-      --muted:#9aa693;
-      --avocado:#8fc29a;
-      --soil:#c99a6c;
-      --water:#6fc3dc;
-      --warn:#e08567;
-      --border:rgba(238,240,232,0.14);
+      --bg:#0f172a;
+      --surface:#1e293b;
+      --ink:#f1f5f9;
+      --muted:#94a3b8;
+      --avocado:#4ade80;
+      --soil:#fbbf24;
+      --water:#38bdf8;
+      --warn:#fb7185;
+      --border:rgba(241,245,249,0.16);
+      --panel-bg:rgba(30,41,59,0.78);
+      --header-grad:linear-gradient(110deg,#052e16,#14532d 55%,#020617);
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#181c16;
-    --surface:#222820;
-    --ink:#eef0e8;
-    --muted:#9aa693;
-    --avocado:#8fc29a;
-    --soil:#c99a6c;
-    --water:#6fc3dc;
-    --warn:#e08567;
-    --border:rgba(238,240,232,0.14);
+    --bg:#0f172a;
+    --surface:#1e293b;
+    --ink:#f1f5f9;
+    --muted:#94a3b8;
+    --avocado:#4ade80;
+    --soil:#fbbf24;
+    --water:#38bdf8;
+    --warn:#fb7185;
+    --border:rgba(241,245,249,0.16);
+    --panel-bg:rgba(30,41,59,0.78);
+    --header-grad:linear-gradient(110deg,#052e16,#14532d 55%,#020617);
     color-scheme: dark;
   }
 
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background:var(--bg);
+    /* No opaque background here on purpose — #weatherBg (fixed, full-viewport, z-index -1)
+       becomes the actual page canvas, so the live weather scene always shows through behind
+       every panel's own frosted-glass fill. */
+    background:transparent;
     color:var(--ink);
     font-family:var(--font-body);
     padding-left:max(16px, env(safe-area-inset-left,0px));
@@ -72,22 +82,72 @@
   }
   .wrap{max-width:980px;margin:0 auto;}
 
+  /* ---------- Animated weather background (art direction borrowed from the Hula Valley
+     reference build: a full-viewport cartoon sun/cloud/rain scene behind everything, driven by
+     this week's actual weather mix via updateWeatherBackground() — our own data, their look). */
+  #weatherBg{
+    position:fixed; inset:0; z-index:-1; overflow:hidden;
+    background:#bae6fd;
+    transition:background-color 0.6s ease;
+  }
+  @media print{ #weatherBg{display:none !important;} }
+  .sun-cartoon{
+    position:absolute; top:8%; right:8%; width:130px; height:130px;
+    background:#FFD700; border-radius:50%;
+    box-shadow:0 0 60px #FF8C00, inset 0 0 20px #FFA500;
+    animation:pulseSun 3s infinite alternate;
+  }
+  .sun-face{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:48px; }
+  @keyframes pulseSun{ 0%{transform:scale(1);} 100%{transform:scale(1.06);} }
+  .cloud-cartoon{
+    position:absolute; background:#fff; border-radius:50px; opacity:0.9;
+    box-shadow:0 8px 18px rgba(0,0,0,0.08); animation:floatCloud linear infinite;
+  }
+  .cloud-cartoon::before{
+    content:""; position:absolute; background:#fff; border-radius:50%;
+    width:60%; height:100%; top:-40%; left:20%;
+  }
+  @keyframes floatCloud{ 0%{transform:translateX(-220px);} 100%{transform:translateX(110vw);} }
+  .rain-drop{
+    position:absolute; width:4px; height:18px; background:#38bdf8;
+    border-radius:50%; opacity:0.85; animation:fallRain linear infinite;
+  }
+  @keyframes fallRain{ 0%{transform:translateY(-20px);} 100%{transform:translateY(110vh);} }
+
   header h1{
     font-family:var(--font-display);
-    font-weight:600;
+    font-weight:800;
     font-size:clamp(1.6rem,4vw,2.3rem);
     margin:0 0 6px;
     text-wrap:balance;
     color:var(--avocado);
   }
-  header p{margin:0;color:var(--muted);max-width:62ch;}
-  header{margin-bottom:24px;}
+  header p{margin:0;color:rgba(255,255,255,0.82);max-width:62ch;}
+  header{
+    margin-bottom:24px;
+    display:flex; gap:16px; align-items:flex-start;
+    background:var(--header-grad);
+    border-radius:20px;
+    padding:22px 24px;
+    box-shadow:0 14px 34px -12px rgba(0,0,0,0.4);
+  }
+  header h1{color:#fff;}
+  header .eyebrow{color:#86efac;}
+  .header-icon{
+    flex:0 0 auto; width:48px; height:48px; border-radius:14px;
+    background:rgba(34,197,94,0.22); border:1px solid rgba(134,239,172,0.35);
+    display:flex; align-items:center; justify-content:center; color:#86efac;
+  }
+  .header-icon i{width:26px; height:26px;}
 
   .panel{
-    background:var(--surface);
+    background:var(--panel-bg);
+    backdrop-filter:blur(var(--panel-blur));
+    -webkit-backdrop-filter:blur(var(--panel-blur));
     border:1px solid var(--border);
-    border-radius:14px;
+    border-radius:20px;
     padding:18px 20px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.05), 0 10px 28px -10px rgba(15,23,42,0.14);
   }
 
   details.panel{padding:0;overflow:hidden;}
@@ -121,7 +181,7 @@
     width:20px;height:20px;
     border-radius:50%;
     background:var(--avocado);
-    color:var(--bg);
+    color:#fff;
     font-family:var(--font-mono);
     font-size:0.72rem;
     flex-shrink:0;
@@ -167,7 +227,9 @@
     font-weight:500;
     padding:8px 10px;
   }
-  .toggle-btn.active{background:var(--avocado);color:var(--bg);border-color:var(--avocado);}
+  .toggle-btn.active{background:var(--avocado);color:#fff;border-color:var(--avocado);}
+  :root[data-theme="dark"] .toggle-btn.active{color:#06240f;}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .toggle-btn.active{color:#06240f;} }
 
   .live-panel{
     border:1px solid var(--border);
@@ -233,10 +295,17 @@
 
   h2{
     font-family:var(--font-display);
+    font-weight:700;
     font-size:1.05rem;
-    margin:0 0 12px;
+    margin:0;
     color:var(--ink);
   }
+  /* The icon lives OUTSIDE the <h2> (as a sibling in this wrapper), not inside it — applyStaticTranslations()
+     sets el.textContent on every [data-i18n] element on every language switch, which would silently
+     delete an icon placed as a child of the h2 itself the next time the language toggles. */
+  .h2-row{display:flex;align-items:center;gap:8px;margin:0 0 12px;}
+  .h2-row h2{margin:0;}
+  .h2-icon{flex:0 0 auto;width:18px;height:18px;color:var(--avocado);}
   .eyebrow{
     font-family:var(--font-mono);
     font-size:0.68rem;
@@ -308,7 +377,9 @@
   .cal-day.blank{visibility:hidden;}
   .cal-day.muted{color:var(--muted);opacity:0.5;}
   .cal-day.today{border-color:var(--avocado);}
-  .cal-day.selected{background:var(--avocado);color:var(--bg);}
+  .cal-day.selected{background:var(--avocado);color:#fff;}
+  :root[data-theme="dark"] .step-num, :root[data-theme="dark"] .cal-day.selected{color:#06240f;}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .step-num, :root:not([data-theme="light"]) .cal-day.selected{color:#06240f;} }
   .cal-day.selected.muted{background:var(--border);color:var(--muted);opacity:1;}
   .cal-legend{font-size:0.72rem;color:var(--muted);margin-top:8px;line-height:1.5;}
   .cal-legend .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--border);margin-right:4px;vertical-align:middle;}
@@ -333,17 +404,21 @@
   td.num, th.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap;}
   tr:last-child td{border-bottom:none;}
   .pill{
-    display:inline-block;
-    padding:2px 9px;
+    display:inline-flex;
+    align-items:center;
+    gap:3px;
+    padding:3px 10px;
     border-radius:999px;
     font-size:0.72rem;
+    font-weight:600;
     font-family:var(--font-mono);
-    border:1px solid var(--border);
+    border:1px solid transparent;
   }
-  .pill.hot{color:var(--warn);border-color:var(--warn);}
-  .pill.rainy{color:var(--water);border-color:var(--water);}
-  .pill.normal{color:var(--avocado);border-color:var(--avocado);}
-  .pill.rest{color:var(--muted);}
+  .pill i{width:11px;height:11px;}
+  .pill.hot{color:#be123c;background:rgba(225,29,72,0.14);}
+  .pill.rainy{color:#0369a1;background:rgba(14,165,233,0.14);}
+  .pill.normal{color:#15803d;background:rgba(22,163,74,0.14);}
+  .pill.rest{color:var(--muted);background:var(--border);}
 
   .bar-track{background:var(--bg);border-radius:4px;height:7px;margin-top:6px;overflow:hidden;}
   .bar-fill{height:100%;background:var(--water);border-radius:4px;}
@@ -356,16 +431,30 @@
   }
   @media (max-width:640px){ .summary{grid-template-columns:1fr;} }
   .stat{
-    background:var(--surface);
+    background:var(--panel-bg);
+    backdrop-filter:blur(var(--panel-blur));
+    -webkit-backdrop-filter:blur(var(--panel-blur));
     border:1px solid var(--border);
-    border-radius:12px;
+    border-radius:16px;
     padding:14px 16px;
   }
-  .stat .eyebrow{margin-bottom:6px;}
+  .stat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .stat .eyebrow{margin-bottom:0;}
+  .stat-icon{
+    flex:0 0 auto;
+    width:26px;height:26px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(14,165,233,0.14); color:var(--water);
+  }
+  .stat-icon i{width:14px;height:14px;}
+  .stat-icon.leaf{background:rgba(22,163,74,0.14); color:var(--avocado);}
+  .stat-icon.gauge{background:rgba(99,102,241,0.14); color:#6366f1;}
+  .stat-icon.warn{background:rgba(225,29,72,0.14); color:var(--warn);}
   .stat .value{
     font-family:var(--font-mono);
     font-size:1.5rem;
     font-variant-numeric:tabular-nums;
+    margin-top:8px;
   }
   .stat .value.warn{color:var(--warn);}
   .stat .sub{font-size:0.78rem;color:var(--muted);margin-top:2px;}
@@ -379,12 +468,17 @@
     font-weight:600;
     font-size:0.85rem;
     padding:9px 16px;
-    border-radius:8px;
+    border-radius:11px;
     border:1px solid var(--border);
     background:var(--avocado);
-    color:var(--bg);
+    color:#fff;
     cursor:pointer;
+    transition:filter 0.15s ease, transform 0.05s ease;
   }
+  :root[data-theme="dark"] button{color:#06240f;}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) button{color:#06240f;} }
+  button:hover:not(:disabled){filter:brightness(1.08);}
+  button:active:not(:disabled){transform:translateY(1px);}
   button.secondary{background:transparent;color:var(--ink);}
   button:disabled{opacity:0.6;cursor:default;}
   button:focus-visible, input:focus-visible, select:focus-visible{outline:2px solid var(--water);outline-offset:1px;}
@@ -462,7 +556,11 @@
     body{background:#fff;color:#000;padding:0;}
     .boot-error, .no-print, button{display:none !important;}
     .print-only{display:block !important;}
-    .panel, details.panel, .plan-panel{border:1px solid #999;box-shadow:none;background:#fff;margin-bottom:10px;page-break-inside:avoid;}
+    .panel, details.panel, .plan-panel{border:1px solid #999;box-shadow:none;backdrop-filter:none;background:#fff;margin-bottom:10px;page-break-inside:avoid;}
+    header{background:none;box-shadow:none;color:#000;padding:0;}
+    header h1, header .eyebrow{color:#000;}
+    header p{color:#333;}
+    .header-icon{display:none;}
     .narrative{background:#fff;border-color:#999;}
     table{min-width:0;}
     th{background:#eee;color:#000;}
@@ -473,9 +571,14 @@
     .print-summary-grid div{padding:2px 0;border-bottom:1px solid #ddd;}
   }
 </style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://unpkg.com/lucide@0.469.0"></script>
 </head>
 <body>
+
+<div id="weatherBg" aria-hidden="true"></div>
 
 <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch between light and dark"></button>
 <button type="button" id="langToggle" class="lang-toggle" aria-label="Switch language / החלף שפה">EN</button>
@@ -483,9 +586,12 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow" data-i18n="eyebrow_planning">Irrigation planning</p>
-    <h1 data-i18n="appTitle">Avocado Irrigation Planner</h1>
-    <p data-i18n="appIntro">Pick any spot on the map. It pulls that location's soil and this week's real hourly forecast, and turns it into a day-by-day, hour-by-hour watering plan — liters per tree, kept inside your water budget and pump, biased to water a little less rather than risk root rot. Everything it pulls automatically, you can also override by hand.</p>
+    <div class="header-icon"><i data-lucide="sprout"></i></div>
+    <div>
+      <p class="eyebrow" data-i18n="eyebrow_planning">Irrigation planning</p>
+      <h1 data-i18n="appTitle">Avocado Irrigation Planner</h1>
+      <p data-i18n="appIntro">Pick any spot on the map. It pulls that location's soil and this week's real hourly forecast, and turns it into a day-by-day, hour-by-hour watering plan — liters per tree, kept inside your water budget and pump, biased to water a little less rather than risk root rot. Everything it pulls automatically, you can also override by hand.</p>
+    </div>
   </header>
 
   <div class="panel no-print" style="margin-bottom:14px;">
@@ -501,7 +607,7 @@
 
   <div class="panel no-print" style="margin-bottom:14px;">
     <p class="eyebrow"><span class="step-num">1</span> <span data-i18n="loc_eyebrow">Location</span></p>
-    <h2 data-i18n="loc_heading">Where's the plot?</h2>
+    <div class="h2-row"><i data-lucide="map-pin" class="h2-icon"></i><h2 data-i18n="loc_heading">Where's the plot?</h2></div>
     <div id="map"></div>
 
     <div class="latlon-row">
@@ -534,7 +640,7 @@
     <summary>
       <span>
         <p class="eyebrow" data-i18n="soilBal_eyebrow">Advanced, optional</p>
-        <h2 data-i18n="soilBal_heading">Soil-water balance (TAW / RAW)</h2>
+        <div class="h2-row"><i data-lucide="layers" class="h2-icon"></i><h2 data-i18n="soilBal_heading">Soil-water balance (TAW / RAW)</h2></div>
       </span>
     </summary>
     <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n-html="soilBal_intro">
@@ -579,7 +685,7 @@
       <span class="step-num">2</span>
       <span>
         <p class="eyebrow" data-i18n="plot_eyebrow">Set once per season</p>
-        <h2 data-i18n="plot_heading">Plot &amp; pump limits</h2>
+        <div class="h2-row"><i data-lucide="gauge" class="h2-icon"></i><h2 data-i18n="plot_heading">Plot &amp; pump limits</h2></div>
       </span>
     </summary>
     <div class="row2">
@@ -689,7 +795,7 @@
 
   <div class="panel no-print" style="margin-bottom:14px;">
     <p class="eyebrow"><span class="step-num">3</span> <span data-i18n="forecast_eyebrow">This week</span></p>
-    <h2 data-i18n="forecast_heading">What's the forecast?</h2>
+    <div class="h2-row"><i data-lucide="cloud-sun" class="h2-icon"></i><h2 data-i18n="forecast_heading">What's the forecast?</h2></div>
 
     <div class="calendar">
       <div class="cal-header">
@@ -729,7 +835,7 @@
 
   <div class="panel plan-panel" style="margin-bottom:14px;">
     <p class="eyebrow"><span class="step-num">4</span> <span data-i18n="output_eyebrow">Output</span></p>
-    <h2 data-i18n="output_heading">This week's irrigation plan</h2>
+    <div class="h2-row"><i data-lucide="calendar-days" class="h2-icon"></i><h2 data-i18n="output_heading">This week's irrigation plan</h2></div>
     <div id="printSummary" class="print-only"></div>
     <p id="narrative" class="narrative"></p>
 
@@ -788,7 +894,7 @@
     <summary>
       <span>
         <p class="eyebrow" data-i18n="ref_eyebrow">Reference, optional</p>
-        <h2 data-i18n-html="ref_heading">Last week's schedule (L / tree)</h2>
+        <div class="h2-row"><i data-lucide="history" class="h2-icon"></i><h2 data-i18n-html="ref_heading">Last week's schedule (L / tree)</h2></div>
       </span>
     </summary>
     <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n="ref_caption">Used only to show how this week's plan differs from a schedule that already worked. Edit if last week looked different.</p>
@@ -799,7 +905,7 @@
     <summary>
       <span>
         <p class="eyebrow" data-i18n="formulas_eyebrow">Progressive disclosure</p>
-        <h2 data-i18n="formulas_heading">How this plan is calculated</h2>
+        <div class="h2-row"><i data-lucide="calculator" class="h2-icon"></i><h2 data-i18n="formulas_heading">How this plan is calculated</h2></div>
       </span>
     </summary>
     <p style="color:var(--muted);font-size:0.85rem;margin-top:-6px;" data-i18n="formulas_intro">Every figure below is read from THIS plan, right now — not a general description that can drift out of sync with what's actually on screen above.</p>
@@ -2979,9 +3085,56 @@
   }
 
   function weatherLabel(w){
-    if(w === "hot") return '<span class="pill hot">' + t("weather_hot") + '</span>';
-    if(w === "rainy") return '<span class="pill rainy">' + t("weather_rainy") + '</span>';
-    return '<span class="pill normal">' + t("weather_normal") + '</span>';
+    if(w === "hot") return '<span class="pill hot"><i data-lucide="flame"></i>' + t("weather_hot") + '</span>';
+    if(w === "rainy") return '<span class="pill rainy"><i data-lucide="cloud-rain"></i>' + t("weather_rainy") + '</span>';
+    return '<span class="pill normal"><i data-lucide="sun"></i>' + t("weather_normal") + '</span>';
+  }
+
+  // Purely cosmetic (art direction only — no bearing on any computation above): a full-viewport
+  // cartoon weather scene behind every panel, driven by THIS WEEK'S OWN weather mix (dayAt(), the
+  // same per-day record the schedule itself reads), not a separate/parallel data source. Rain wins
+  // if it's at least as common as heat; heat wins if it's strictly more common; otherwise a calm
+  // cloudy scene plays, matching the "driest of hot/rain/else" framing used elsewhere in the app.
+  function updateWeatherBackground(){
+    var bg = $("weatherBg");
+    if(!bg) return;
+    var hotCount = 0, rainyCount = 0;
+    for(var i = 0; i < 7; i++){
+      var w = dayAt(i).weather;
+      if(w === "hot") hotCount++;
+      if(w === "rainy") rainyCount++;
+    }
+    bg.innerHTML = "";
+    if(rainyCount > 0 && rainyCount >= hotCount){
+      bg.style.backgroundColor = "#64748b";
+      for(var r = 0; r < 50; r++){
+        var drop = document.createElement("div");
+        drop.className = "rain-drop";
+        drop.style.left = (Math.random() * 100) + "vw";
+        drop.style.top = (Math.random() * -100) + "vh";
+        drop.style.animationDuration = (Math.random() * 0.5 + 0.6) + "s";
+        bg.appendChild(drop);
+      }
+    } else if(hotCount > 0){
+      bg.style.backgroundColor = "#fde047";
+      var sun = document.createElement("div");
+      sun.className = "sun-cartoon";
+      sun.innerHTML = '<div class="sun-face">😎</div>';
+      bg.appendChild(sun);
+    } else {
+      bg.style.backgroundColor = "#bae6fd";
+      for(var c = 0; c < 5; c++){
+        var cloud = document.createElement("div");
+        cloud.className = "cloud-cartoon";
+        var cw = Math.random() * 80 + 100;
+        cloud.style.width = cw + "px";
+        cloud.style.height = (cw / 2.5) + "px";
+        cloud.style.top = (Math.random() * 30) + "vh";
+        cloud.style.animationDuration = (Math.random() * 25 + 20) + "s";
+        cloud.style.animationDelay = (Math.random() * -40) + "s";
+        bg.appendChild(cloud);
+      }
+    }
   }
 
   function noteFor(w, isRest, capped, litersPerTree, rainMm, blocked, midnightCapped, invalidConfig){
@@ -3600,13 +3753,16 @@
     // summary
     var summary = $("summary");
     summary.innerHTML =
-      '<div class="stat"><p class="eyebrow">' + t("sum_waterUsed") + '</p>' +
+      '<div class="stat"><div class="stat-head"><p class="eyebrow">' + t("sum_waterUsed") + '</p>' +
+        '<span class="stat-icon water"><i data-lucide="droplets"></i></span></div>' +
         '<div class="value">' + weeklyFinal.toLocaleString() + ' ' + t("unit_l") + '</div>' +
         '<div class="sub">' + t("sum_ofBudget", { budget: budget.toLocaleString(), pct: pctUsed.toFixed(0) }) + '</div></div>' +
-      '<div class="stat"><p class="eyebrow">' + t("sum_irrigationDays") + '</p>' +
+      '<div class="stat"><div class="stat-head"><p class="eyebrow">' + t("sum_irrigationDays") + '</p>' +
+        '<span class="stat-icon leaf"><i data-lucide="calendar-check"></i></span></div>' +
         '<div class="value">' + litersPerTree.filter(function(l){return l>0;}).length + ' / 7</div>' +
         '<div class="sub">' + (restDay >= 0 ? t("sum_isRestDay", { day: DAYS[restDay] }) : t("sum_noRestDay")) + '</div></div>' +
-      '<div class="stat"><p class="eyebrow">' + t("sum_pumpHeadroom") + '</p>' +
+      '<div class="stat"><div class="stat-head"><p class="eyebrow">' + t("sum_pumpHeadroom") + '</p>' +
+        '<span class="stat-icon' + (cappedDays.length ? ' warn' : ' gauge') + '"><i data-lucide="gauge"></i></span></div>' +
         '<div class="value' + (cappedDays.length ? ' warn' : '') + '">' + Math.round(dailyCap).toLocaleString() + ' ' + t("unit_lPerDay") + '</div>' +
         '<div class="sub">' + (cappedDays.length ? t("sum_hitCap", { n: cappedDays.length }) : t("sum_neverExceeded")) + '</div></div>';
 
@@ -3686,6 +3842,12 @@
           "</td>";
       body.appendChild(tr);
     });
+
+    updateWeatherBackground();
+    // Re-scans the whole document for any data-lucide tags lucide.js hasn't turned into inline
+    // SVGs yet — covers both the static header/panel icons (present since first paint) and any
+    // just-injected into innerHTML this render (weather pills, summary stat badges).
+    if(window.lucide) lucide.createIcons();
 
     saveState(state);
   }
