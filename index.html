@@ -2448,77 +2448,71 @@
   function renderFormulasPanel(ctx){
     var body = $("formulasBody");
     var parts = [];
+    var stageKey = ctx.growthStage === "young" ? "plot_stageYoung" : ctx.growthStage === "developing" ? "plot_stageDeveloping" : "plot_stageMature";
 
-    parts.push("<p><strong>Mode: " + (ctx.mode === "assignment" ? "Assignment / example" : "Field planning") + ".</strong> " +
-      (ctx.mode === "assignment" ?
-        "Deterministic offline demonstration — weather categories and rainfall are fixed assumptions, never live data, and the live-fetch button is disabled. Numeric ET&#8320; is never used in this mode." :
-        "Dated week with " + (ctx.source === "live" ? "a live forecast pulled from Open-Meteo" : "manually entered weather") + ". " +
-        (ctx.source === "live" ? "Any day you've hand-edited since pulling is marked and no longer tied to that pulled ET&#8320;." :
-          "Switch to a live pull to use numeric ET&#8320; instead of the baseline/category estimate below.")) +
+    parts.push("<p><strong>" + (ctx.mode === "assignment" ? t("formulas_modeAssignment") : t("formulas_modeField")) + "</strong> " +
+      (ctx.mode === "assignment" ? t("formulas_modeAssignmentDetail") :
+        (ctx.source === "live" ? t("formulas_modeFieldLive") : t("formulas_modeFieldManual")) + " " +
+        (ctx.source === "live" ? t("formulas_modeFieldLiveNote") : t("formulas_modeFieldManualNote"))) +
       "</p>");
 
-    parts.push("<p><strong>Per-tree water need.</strong> For a day with real ET&#8320; (Open-Meteo's reference evapotranspiration): " +
-      "<code>need = ET&#8320; &times; kc &times; soilFactor &times; canopyFactor &times; effAreaPerTree</code> — currently kc " + ctx.variety.kc.toFixed(2) +
-      " (" + ctx.variety.name + "), soilFactor " + ctx.soilFactor.toFixed(2) + ", canopyFactor " + ctx.canopyFactor.toFixed(2) + " (" +
-      ctx.canopyCoverage + "% coverage, " + ctx.growthStage + "), effAreaPerTree " + Math.round(ctx.effAreaPerTree) +
-      " m&sup2;. For a day with no live ET&#8320; (manual/assignment): <code>need = baseline &times; heatFactor(if hot) &times; soilFactor &times; waterFactor &times; canopyFactor &times; densityFactor</code> — " +
-      "currently baseline " + ctx.baseline + " L/tree, heatFactor " + ctx.variety.heatFactor.toFixed(2) + " on a hot day, waterFactor " +
-      ctx.variety.waterFactor.toFixed(2) + ", densityFactor " + ctx.densityFactor.toFixed(2) + ". A real sensor reading for today (if used) replaces " +
-      "this whole formula outright rather than being scaled by any of the above, canopyFactor included. Both modeled paths then subtract rainfall credit " +
-      "(<code>rain_mm &times; effAreaPerTree &times; " + INFILTRATION + "</code> — " + Math.round(INFILTRATION * 100) +
-      "% of rainfall assumed to reach the root zone), floored at zero, then divide by system efficiency (<code>net &divide; efficiency</code>) " +
-      "for the GROSS, pump-side figure used everywhere downstream — currently &divide; " + ctx.efficiencyPct + "%.</p>");
+    parts.push("<p><strong>" + t("formulas_needHeading") + "</strong> " +
+      t("formulas_needEt0", {
+        kc: ctx.variety.kc.toFixed(2), variety: ctx.variety.name, soilFactor: ctx.soilFactor.toFixed(2),
+        canopyFactor: ctx.canopyFactor.toFixed(2), coverage: ctx.canopyCoverage, stage: t(stageKey), area: Math.round(ctx.effAreaPerTree)
+      }) + " " +
+      t("formulas_needBaseline", {
+        baseline: ctx.baseline, heatFactor: ctx.variety.heatFactor.toFixed(2),
+        waterFactor: ctx.variety.waterFactor.toFixed(2), densityFactor: ctx.densityFactor.toFixed(2)
+      }) + " " + t("formulas_needSensor") + " " +
+      t("formulas_needTail", { infiltration: INFILTRATION, infiltrationPct: Math.round(INFILTRATION * 100), efficiencyPct: ctx.efficiencyPct }) + "</p>");
 
-    parts.push("<p><strong>Tree count &amp; reference area.</strong> " + ctx.trees.toLocaleString() + " trees = round(" + ctx.area + " dunam &times; " +
-      ctx.density + " trees/dunam). Each tree's reference area is capped at the " + ctx.REFERENCE_DENSITY + "/dunam closed-canopy reference (" +
-      Math.round(1000 / ctx.REFERENCE_DENSITY) + " m&sup2;), so planting sparser than that doesn't inflate any one tree's own demand. Land per tree " +
-      "and actual canopy/root area are being treated as the same thing here — a simplification, not a measured root-zone reading.</p>");
+    parts.push("<p><strong>" + t("formulas_treeCountHeading") + "</strong> " +
+      t("formulas_treeCount", {
+        trees: ctx.trees.toLocaleString(), area: ctx.area, density: ctx.density,
+        refDensity: ctx.REFERENCE_DENSITY, refArea: Math.round(1000 / ctx.REFERENCE_DENSITY)
+      }) + "</p>");
 
-    parts.push("<p><strong>Hardware feasibility.</strong> All " + ctx.trees.toLocaleString() + " trees at once need <code>trees &times; emitterFlow</code> = " +
-      Math.round(ctx.zoneDemandFlow).toLocaleString() + " L/h; the pump supplies " + ctx.pumpCapacity.toLocaleString() + " L/h, so whole-plot operation is " +
-      (ctx.wholePlotFeasible ? "feasible" : "NOT feasible (scheduled at the pump's actual rate instead, which under-delivers vs. the all-at-once ideal)") +
-      ". Effective flow = <code>min(zoneDemandFlow, pumpCapacity)</code> = " + Math.round(ctx.effectiveFlow).toLocaleString() +
-      " L/h; daily cap = <code>effectiveFlow &times; maxHours</code> = " + Math.round(ctx.dailyCap).toLocaleString() +
-      " L/day. Event duration = <code>volume &divide; effectiveFlow</code>, kept to minute precision, never rounded up to a whole hour. " +
-      "This is a simplified capacity check (whole-plot flow vs. pump rating only), not a pressure-network/hydraulic design — no zones are modeled.</p>");
+    parts.push("<p><strong>" + t("formulas_hwHeading") + "</strong> " +
+      t("formulas_hw", {
+        trees: ctx.trees.toLocaleString(), zoneFlow: Math.round(ctx.zoneDemandFlow).toLocaleString(), pump: ctx.pumpCapacity.toLocaleString(),
+        feasible: ctx.wholePlotFeasible ? t("formulas_hwFeasible") : t("formulas_hwInfeasible"),
+        effFlow: Math.round(ctx.effectiveFlow).toLocaleString(), dailyCap: Math.round(ctx.dailyCap).toLocaleString()
+      }) + "</p>");
 
     parts.push(ctx.rawWeeklyTotal > ctx.budget ?
-      "<p><strong>Budget scaling — active.</strong> Raw weekly demand " + Math.round(ctx.rawWeeklyTotal).toLocaleString() + " L exceeds the " +
-        ctx.budget.toLocaleString() + " L budget, so every irrigation day is scaled by <code>budget &divide; rawWeeklyTotal</code> = " +
-        (ctx.scale * 100).toFixed(1) + "% before hardware capping is applied.</p>" :
-      "<p><strong>Budget scaling — not active.</strong> Raw weekly demand (" + Math.round(ctx.rawWeeklyTotal).toLocaleString() + " L) is within the " +
-        ctx.budget.toLocaleString() + " L budget. Hardware capping above is a separate, independent limit and can still apply even when this isn't.</p>");
+      "<p><strong>" + t("formulas_budgetActive") + "</strong> " + t("formulas_budgetActiveDetail", {
+        raw: Math.round(ctx.rawWeeklyTotal).toLocaleString(), budget: ctx.budget.toLocaleString(), scale: (ctx.scale * 100).toFixed(1)
+      }) + "</p>" :
+      "<p><strong>" + t("formulas_budgetInactive") + "</strong> " + t("formulas_budgetInactiveDetail", {
+        raw: Math.round(ctx.rawWeeklyTotal).toLocaleString(), budget: ctx.budget.toLocaleString()
+      }) + "</p>");
 
     if(ctx.compensation){
       var c = ctx.compensation;
-      parts.push("<p><strong>Rest-day redistribution — active.</strong> " + DAYS[c.restDay] + "'s own need (" + Math.ceil(c.perTree) + " L/tree gross) is " +
-        (c.storageAware ? "sized against the soil-water balance below" : "split flat (no soil-balance data to reason from)") + ": " +
-        (c.beforeIdx !== -1 ? Math.ceil(c.beforeAmount) + " L/tree advanced onto " + DAYS[c.beforeIdx] : "none advanced (no day before in this view)") + "; " +
-        (c.afterIdx !== -1 ? Math.ceil(c.afterAmount) + " L/tree made up on " + DAYS[c.afterIdx] : "none made up (no day after in this view)") +
-        (c.carryoverPerTree > 0.5 ? "; " + Math.ceil(c.carryoverPerTree) + " L/tree unresolved, carried to next week" : "") + ".</p>");
+      parts.push("<p><strong>" + t("formulas_restActive") + "</strong> " + t("formulas_restActiveDetail", {
+        day: DAYS[c.restDay], amt: Math.ceil(c.perTree),
+        how: c.storageAware ? t("formulas_restActiveStorage") : t("formulas_restActiveFlat"),
+        beforeClause: c.beforeIdx !== -1 ? t("formulas_restBeforeAdvanced", { amt: Math.ceil(c.beforeAmount), day: DAYS[c.beforeIdx] }) : t("formulas_restBeforeNone"),
+        afterClause: c.afterIdx !== -1 ? t("formulas_restAfterMade", { amt: Math.ceil(c.afterAmount), day: DAYS[c.afterIdx] }) : t("formulas_restAfterNone"),
+        carryover: c.carryoverPerTree > 0.5 ? t("formulas_restCarryover", { amt: Math.ceil(c.carryoverPerTree) }) : ""
+      }) + "</p>");
     } else if(ctx.restDay >= 0){
-      parts.push("<p><strong>Rest-day redistribution — not active.</strong> " + DAYS[ctx.restDay] + " isn't forecast to need water this week, so there's nothing to redistribute.</p>");
+      parts.push("<p><strong>" + t("formulas_restInactive") + "</strong> " + t("formulas_restInactiveDetail", { day: DAYS[ctx.restDay] }) + "</p>");
     } else {
-      parts.push("<p><strong>Rest-day redistribution — not applicable.</strong> No rest day is configured; every day is watered on its own.</p>");
+      parts.push("<p><strong>" + t("formulas_restNA") + "</strong> " + t("formulas_restNADetail") + "</p>");
     }
 
     parts.push(ctx.soilCtx.enabled && ctx.soilCtx.tawRaw.valid ?
-      "<p><strong>Soil-water balance — active.</strong> <code>TAW = 1,000 &times; (FC &minus; WP) &times; root depth</code> = " +
-        Math.round(ctx.soilCtx.tawRaw.taw) + " mm; <code>RAW = depletion fraction &times; TAW</code> = " + Math.round(ctx.soilCtx.tawRaw.raw) +
-        " mm. Depletion is tracked in mm per tree's reference area, day to day, and currently feeds only the rest-day advance-watering decision above — it does not yet feed back into any other day's own scheduled amount.</p>" :
-      "<p><strong>Soil-water balance — " + (ctx.soilCtx.tawRaw.valid ? "off" : "invalid, FC must exceed WP") +
-        ".</strong> Ignored in this plan's actual schedule; rest-day redistribution above uses the flat fallback instead.</p>");
+      "<p><strong>" + t("formulas_soilActive") + "</strong> " + t("formulas_soilActiveDetail", { taw: Math.round(ctx.soilCtx.tawRaw.taw), raw: Math.round(ctx.soilCtx.tawRaw.raw) }) + "</p>" :
+      "<p><strong>" + (ctx.soilCtx.tawRaw.valid ? t("formulas_soilOff") : t("formulas_soilInvalid")) + "</strong> " + t("formulas_soilInactiveDetail") + "</p>");
 
-    parts.push("<p><strong>Ignored this mode.</strong> " +
-      (ctx.mode === "assignment" ? "Live forecast fetch, map/location pull, and numeric ET&#8320; — every number above comes from the baseline/category path. " : "") +
-      (!ctx.sensorEnabled ? "Today's manual sensor override is off, so it plays no part in any number above." : "Today's manual sensor reading is active and overrides the normal calculation for today only.") +
+    parts.push("<p><strong>" + t("formulas_ignoredHeading") + "</strong> " +
+      (ctx.mode === "assignment" ? t("formulas_ignoredAssignment") + " " : "") +
+      (!ctx.sensorEnabled ? t("formulas_ignoredSensorOff") : t("formulas_ignoredSensorOn")) +
       "</p>");
 
-    parts.push('<p style="color:var(--muted);">Sources: <a href="https://www.fao.org/4/x0490e/x0490e0b.htm" target="_blank" rel="noopener">FAO-56, crop evapotranspiration</a> (ET&#8320;&times;kc), ' +
-      '<a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">FAO-56, soil water balance</a> (TAW/RAW), ' +
-      '<a href="https://ipm.ucanr.edu/agriculture/avocado/monitor-and-manage-irrigation/" target="_blank" rel="noopener">UC IPM, avocado irrigation</a>. ' +
-      "Crop coefficients, soil-type multipliers, rot-sensitivity/heat/water factors, the " + Math.round(INFILTRATION * 100) +
-      "% rainfall-infiltration figure, the " + "40-trees/dunam reference density, and the soil-water-balance defaults are this app's own estimates built from that general guidance — not a validated reading for any specific plot. Replace them with real field/agronomist data where you have it.</p>");
+    parts.push('<p style="color:var(--muted);">' + t("formulas_sources", { infiltrationPct: Math.round(INFILTRATION * 100) }) + '</p>');
 
     body.innerHTML = parts.join("");
   }
