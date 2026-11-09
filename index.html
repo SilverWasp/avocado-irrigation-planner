@@ -1573,30 +1573,33 @@
   // not a fallback: a live point API (ISRIC SoilGrids, tried in fetchSoil() below) can go down or
   // slow to a crawl — this table can't, because it makes no network call at all. Checked in order
   // (most specific first); anywhere not covered defaults to loam, the safest generic midpoint.
+  // name/label are i18n dictionary KEYS, translated via t() at display time (localSoilEstimate
+  // below), not raw display text — lets the same handful of repeated soil-texture labels (only 5
+  // distinct ones across 18 regions) be translated once each instead of per-entry.
   var SOIL_REGIONS = [
     // Named local surveys (highest confidence)
-    { name: "Hula Valley", latMin: 32.9, latMax: 33.25, lonMin: 35.45, lonMax: 35.70, value: "0.85", label: "heavy clay-loam" },
-    { name: "Negev Desert", latMin: 29.5, latMax: 31.3, lonMin: 34.2, lonMax: 35.4, value: "1.15", label: "sandy / fast-draining" },
-    { name: "Galilee / Golan hills", latMin: 32.6, latMax: 33.5, lonMin: 35.1, lonMax: 36.0, value: "1.0", label: "loam" },
+    { name: "region_hula", latMin: 32.9, latMax: 33.25, lonMin: 35.45, lonMax: 35.70, value: "0.85", label: "soilLabel_clayLoamHeavy" },
+    { name: "region_negev", latMin: 29.5, latMax: 31.3, lonMin: 34.2, lonMax: 35.4, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_galilee", latMin: 32.6, latMax: 33.5, lonMin: 35.1, lonMax: 36.0, value: "1.0", label: "soilLabel_loam" },
     // Mediterranean-climate belts (checked before the broader desert belts below, since several
     // of these sit on the coastal edge of one) — typically clay-rich terra rossa / clay-loam
-    { name: "Mediterranean basin", latMin: 30, latMax: 45, lonMin: -10, lonMax: 36, value: "0.85", label: "clay-loam (Mediterranean)" },
-    { name: "California", latMin: 32, latMax: 40, lonMin: -124, lonMax: -117, value: "0.85", label: "clay-loam (Mediterranean)" },
-    { name: "Central Chile", latMin: -37, latMax: -30, lonMin: -73, lonMax: -70, value: "0.85", label: "clay-loam (Mediterranean)" },
-    { name: "Southwest Australia", latMin: -35, latMax: -31, lonMin: 114, lonMax: 119, value: "0.85", label: "clay-loam (Mediterranean)" },
-    { name: "Western Cape", latMin: -34.5, latMax: -32, lonMin: 18, lonMax: 20, value: "0.85", label: "clay-loam (Mediterranean)" },
+    { name: "region_medBasin", latMin: 30, latMax: 45, lonMin: -10, lonMax: 36, value: "0.85", label: "soilLabel_clayLoamMed" },
+    { name: "region_california", latMin: 32, latMax: 40, lonMin: -124, lonMax: -117, value: "0.85", label: "soilLabel_clayLoamMed" },
+    { name: "region_chile", latMin: -37, latMax: -30, lonMin: -73, lonMax: -70, value: "0.85", label: "soilLabel_clayLoamMed" },
+    { name: "region_ausSW", latMin: -35, latMax: -31, lonMin: 114, lonMax: 119, value: "0.85", label: "soilLabel_clayLoamMed" },
+    { name: "region_westernCape", latMin: -34.5, latMax: -32, lonMin: 18, lonMax: 20, value: "0.85", label: "soilLabel_clayLoamMed" },
     // Equatorial rainforest belts — heavily weathered, clay-rich soils
-    { name: "Amazon basin", latMin: -10, latMax: 5, lonMin: -75, lonMax: -50, value: "0.85", label: "clay (equatorial)" },
-    { name: "Congo basin", latMin: -5, latMax: 5, lonMin: 10, lonMax: 30, value: "0.85", label: "clay (equatorial)" },
-    { name: "Southeast Asia", latMin: -8, latMax: 8, lonMin: 95, lonMax: 141, value: "0.85", label: "clay (equatorial)" },
+    { name: "region_amazon", latMin: -10, latMax: 5, lonMin: -75, lonMax: -50, value: "0.85", label: "soilLabel_clayEquatorial" },
+    { name: "region_congo", latMin: -5, latMax: 5, lonMin: 10, lonMax: 30, value: "0.85", label: "soilLabel_clayEquatorial" },
+    { name: "region_seAsia", latMin: -8, latMax: 8, lonMin: 95, lonMax: 141, value: "0.85", label: "soilLabel_clayEquatorial" },
     // Major desert belts — low organic matter, fast-draining
-    { name: "Sahara / Arabian desert belt", latMin: 15, latMax: 33, lonMin: -17, lonMax: 60, value: "1.15", label: "sandy / fast-draining" },
-    { name: "Kalahari / Namib", latMin: -29, latMax: -17, lonMin: 15, lonMax: 27, value: "1.15", label: "sandy / fast-draining" },
-    { name: "Australian Outback", latMin: -31, latMax: -19, lonMin: 118, lonMax: 141, value: "1.15", label: "sandy / fast-draining" },
-    { name: "North American SW desert", latMin: 23, latMax: 37, lonMin: -117, lonMax: -103, value: "1.15", label: "sandy / fast-draining" },
-    { name: "Central Asian desert belt", latMin: 34, latMax: 46, lonMin: 55, lonMax: 110, value: "1.15", label: "sandy / fast-draining" },
-    { name: "Atacama", latMin: -29, latMax: -17, lonMin: -72, lonMax: -68, value: "1.15", label: "sandy / fast-draining" },
-    { name: "Patagonia", latMin: -52, latMax: -39, lonMin: -72, lonMax: -65, value: "1.15", label: "sandy / fast-draining" }
+    { name: "region_sahara", latMin: 15, latMax: 33, lonMin: -17, lonMax: 60, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_kalahari", latMin: -29, latMax: -17, lonMin: 15, lonMax: 27, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_ausOutback", latMin: -31, latMax: -19, lonMin: 118, lonMax: 141, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_naSWDesert", latMin: 23, latMax: 37, lonMin: -117, lonMax: -103, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_centralAsia", latMin: 34, latMax: 46, lonMin: 55, lonMax: 110, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_atacama", latMin: -29, latMax: -17, lonMin: -72, lonMax: -68, value: "1.15", label: "soilLabel_sandy" },
+    { name: "region_patagonia", latMin: -52, latMax: -39, lonMin: -72, lonMax: -65, value: "1.15", label: "soilLabel_sandy" }
   ];
 
   function localSoilEstimate(lat, lon){
@@ -1606,7 +1609,7 @@
         return { value: r.value, label: r.label, region: r.name };
       }
     }
-    return { value: "1.0", label: "loam", region: null };
+    return { value: "1.0", label: "soilLabel_loam", region: null };
   }
 
   function applyLocalSoilEstimate(){
@@ -1615,8 +1618,8 @@
     var status = $("soilStatus");
     status.className = "fetch-status";
     status.textContent = est.region ?
-      "Built-in estimate for " + est.region + ": " + est.label + ". Reliable (no network call) — override the dropdown if you know this plot better." :
-      "No specific region matched, so defaulting to loam as a neutral estimate. Reliable (no network call) — override the dropdown if you know this plot better.";
+      t("soil_builtinEstimate", { region: t(est.region), label: t(est.label) }) :
+      t("soil_noRegionMatch");
   }
 
   function $(id){ return document.getElementById(id); }
@@ -1771,7 +1774,10 @@
   function formatDate(iso){
     try{
       var d = new Date(iso + "T00:00:00");
-      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      // he-IL with no calendar override still uses the ordinary Gregorian calendar (just Hebrew
+      // month names/digits) — not the Hebrew lunar calendar, which would be a different and
+      // unwanted date system entirely for a page that otherwise plans by Gregorian dates.
+      return d.toLocaleDateString(LANG === "he" ? "he-IL" : undefined, { month: "short", day: "numeric" });
     }catch(e){ return ""; }
   }
 
@@ -1869,8 +1875,7 @@
       } else {
         var status = $("fetchStatus");
         status.className = "fetch-status error";
-        status.textContent = "This week falls outside the forecast range (about " + FORECAST_PAST_DAYS +
-          " days back to " + FORECAST_FUTURE_DAYS + " ahead) — enter it by hand below.";
+        status.textContent = t("forecast_outsideRange", { past: FORECAST_PAST_DAYS, future: FORECAST_FUTURE_DAYS });
         render();
       }
     } else {
@@ -1884,7 +1889,7 @@
     grid.innerHTML = "";
 
     var year = calendarMonthCursor.getFullYear(), month = calendarMonthCursor.getMonth();
-    $("calLabel").textContent = calendarMonthCursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    $("calLabel").textContent = calendarMonthCursor.toLocaleDateString(LANG === "he" ? "he-IL" : undefined, { month: "long", year: "numeric" });
 
     var firstWeekday = new Date(year, month, 1).getDay();
     var daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -2028,33 +2033,30 @@
   function fetchSoil(){
     var status = $("soilStatus");
     status.className = "fetch-status";
-    status.textContent = "Trying live soil detection (ISRIC SoilGrids, attempt 1 of 2)…";
+    status.textContent = t("soil_tryingLive1");
 
     trySoilQuery(state.lat, state.lon, 7000)
       .catch(function(){
-        status.textContent = "First attempt didn't respond — trying live soil detection again (attempt 2 of 2)…";
+        status.textContent = t("soil_tryingLive2");
         return trySoilQuery(state.lat, state.lon, 7000);
       })
       .then(function(result){
         var clay = result.clay, sand = result.sand;
-        var value, label;
-        if(clay >= 30){ value = "0.85"; label = "heavy clay-loam"; }
-        else if(sand >= 60){ value = "1.15"; label = "sandy / fast-draining"; }
-        else { value = "1.0"; label = "loam"; }
+        var value, labelKey;
+        if(clay >= 30){ value = "0.85"; labelKey = "soilLabel_clayLoamHeavy"; }
+        else if(sand >= 60){ value = "1.15"; labelKey = "soilLabel_sandy"; }
+        else { value = "1.0"; labelKey = "soilLabel_loam"; }
 
         $("soil").value = value;
         status.className = "fetch-status";
-        status.textContent = "Detected " + label + " (clay " + clay.toFixed(0) + "%, sand " + sand.toFixed(0) +
-          "%) from ISRIC SoilGrids. Override the dropdown if you know this plot better.";
+        status.textContent = t("soil_detected", { label: t(labelKey), clay: clay.toFixed(0), sand: sand.toFixed(0) });
         render();
       })
       .catch(function(err){
         status.className = "fetch-status error";
-        var reason = err.name === "AbortError" ? "it didn't respond in time, twice" : err.message;
+        var reason = err.name === "AbortError" ? t("err_noResponseTwice") : err.message;
         var current = $("soil").options[$("soil").selectedIndex].text;
-        status.textContent = "Live soil detection failed (" + reason + ") — this third-party service is " +
-          "unreliable right now. Keeping the regional default (" + current + "). Pick a different soil type " +
-          "by hand, or try live detection again later.";
+        status.textContent = t("soil_detectFailed", { reason: reason, current: current });
       });
   }
 
@@ -2073,7 +2075,7 @@
 
     btn.disabled = true;
     status.className = "fetch-status";
-    status.textContent = "Fetching the forecast…";
+    status.textContent = t("forecast_fetching");
 
     // Capture this request's own identity (location, dates, sequence number) so that if a newer
     // request starts before this one resolves, this one's response gets discarded on arrival rather
@@ -2146,14 +2148,13 @@
 
         buildDayCards();
         render();
-        status.textContent = "Pulled " + formatDate(d.time[0]) + " – " + formatDate(d.time[d.time.length-1]) +
-          ". Edit any day below if it needs a human override.";
+        status.textContent = t("forecast_pulled", { from: formatDate(d.time[0]), to: formatDate(d.time[d.time.length-1]) });
       })
       .catch(function(err){
         if(mySeq !== forecastRequestSeq) return; // a newer request's own status already applies
         status.className = "fetch-status error";
-        var reason = err.name === "AbortError" ? "it took too long to respond" : err.message;
-        status.textContent = "Couldn't reach the forecast service (" + reason + "). Enter the week by hand instead.";
+        var reason = err.name === "AbortError" ? t("err_tooSlow") : err.message;
+        status.textContent = t("forecast_unreachable", { reason: reason });
       })
       .finally(function(){
         btn.disabled = false;
@@ -2304,12 +2305,11 @@
     var tawRaw = soilCtx.tawRaw;
     var note = $("tawRawNote"), panel = $("soilBalancePanel");
     if(!tawRaw.valid){
-      note.textContent = "Field capacity (" + soilCtx.fcPct + "%) must be greater than wilting point (" + soilCtx.wpPct + "%), and root depth must be positive — fix the inputs above to enable the balance.";
+      note.textContent = t("soilBal_invalid", { fc: soilCtx.fcPct, wp: soilCtx.wpPct });
       panel.innerHTML = "";
       return;
     }
-    note.textContent = "TAW (total available water): " + Math.round(tawRaw.taw) + " mm · RAW (readily available before stress risk): " +
-      Math.round(tawRaw.raw) + " mm, for a " + soilCtx.rootDepthM + " m root zone.";
+    note.textContent = t("soilBal_tawRawNote", { taw: Math.round(tawRaw.taw), raw: Math.round(tawRaw.raw), depth: soilCtx.rootDepthM });
     if(!soilCtx.enabled){
       panel.innerHTML = "";
       return;
@@ -2323,7 +2323,7 @@
       var dateLabel = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : "";
       var label = DAYS[i] + (dateLabel ? " (" + dateLabel + ")" : "");
       if(!r.known){
-        return "<tr><td>" + label + "</td><td colspan=\"6\" style=\"color:var(--muted);\">Not simulated — no live ET&#8320; for this day yet.</td></tr>";
+        return "<tr><td>" + label + "</td><td colspan=\"6\" style=\"color:var(--muted);\">" + t("soilBal_notSimulated") + "</td></tr>";
       }
       // Round every input cell first, then DERIVE the displayed end from those same rounded
       // numbers (not from the true unrounded end) — otherwise a reader doing "17 - 0 - 1 + 2" by
@@ -2335,7 +2335,7 @@
       var dAfterRefill = dStart - dRain - dIrrigation;
       var dDrainage = dAfterRefill < 0 ? -dAfterRefill : 0;
       var dEnd = Math.min(Math.max(0, dAfterRefill) + dEt, Math.round(tawRaw.taw));
-      var riskLabel = (dEnd > Math.round(tawRaw.raw)) ? "<strong style=\"color:#b5460a;\">Yes — past RAW</strong>" : "No";
+      var riskLabel = (dEnd > Math.round(tawRaw.raw)) ? "<strong style=\"color:#b5460a;\">" + t("soilBal_riskYes") + "</strong>" : t("soilBal_riskNo");
       return "<tr><td>" + label + "</td>" +
         "<td class=\"num\">" + dStart + "</td>" +
         "<td class=\"num\">" + dRain + "</td>" +
@@ -2348,12 +2348,11 @@
 
     panel.innerHTML =
       '<div class="tableScroll" style="margin-top:10px;">' +
-      '<table><thead><tr><th>Day</th><th class="num">Depletion start (mm)</th><th class="num">Rain credit (mm)</th>' +
-      '<th class="num">Irrigation (mm)</th><th class="num">ET (mm)</th><th class="num">Drainage (mm)</th>' +
-      '<th class="num">Depletion end (mm)</th><th>Stress risk</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<p style="font-size:0.78rem;color:var(--muted);margin-top:6px;">Depletion end is how dry the root-zone bucket is at day close (0 = full, ' +
-      Math.round(tawRaw.taw) + ' mm = empty). Stress risk means depletion crossed RAW (' + Math.round(tawRaw.raw) +
-      ' mm) — this reports what the schedule above already does to the soil; it does not change that schedule.</p>';
+      '<table><thead><tr><th>' + t("th_day") + '</th><th class="num">' + t("soilBal_th_start") + '</th><th class="num">' + t("soilBal_th_rain") + '</th>' +
+      '<th class="num">' + t("soilBal_th_irrigation") + '</th><th class="num">' + t("soilBal_th_et") + '</th><th class="num">' + t("soilBal_th_drainage") + '</th>' +
+      '<th class="num">' + t("soilBal_th_end") + '</th><th>' + t("soilBal_th_risk") + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p style="font-size:0.78rem;color:var(--muted);margin-top:6px;">' +
+      t("soilBal_caption", { taw: Math.round(tawRaw.taw), raw: Math.round(tawRaw.raw) }) + '</p>';
   }
 
   // ---------- Demand vs. applied chart (brief section 9) ----------
@@ -2399,19 +2398,19 @@
 
       marks += '<rect x="' + demandX + '" y="' + y(demandV) + '" width="' + barW + '" height="' + barH(demandV) +
         '" fill="' + (isRest ? "var(--muted)" : "var(--avocado)") + '" opacity="' + (isRest ? 0.55 : 1) + '"><title>' +
-        DAYS[i] + " demand: " + Math.round(demandV) + " L/tree" + (isRest ? " (rest day — not actually irrigated)" : "") + '</title></rect>';
+        t(isRest ? "chart_title_demandRest" : "chart_title_demand", { day: DAYS[i], v: Math.round(demandV) }) + '</title></rect>';
       marks += '<rect x="' + appliedX + '" y="' + y(appliedV) + '" width="' + barW + '" height="' + barH(appliedV) +
-        '" fill="var(--water)"><title>' + DAYS[i] + " applied: " + Math.round(appliedV) + ' L/tree</title></rect>';
+        '" fill="var(--water)"><title>' + t("chart_title_applied", { day: DAYS[i], v: Math.round(appliedV) }) + '</title></rect>';
 
       if(!isRest && appliedV < demandV - 0.5){
         marks += '<rect x="' + appliedX + '" y="' + y(demandV) + '" width="' + barW + '" height="' + (y(appliedV) - y(demandV)) +
-          '" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3,2"><title>' + DAYS[i] + " deficit: " +
-          Math.round(demandV - appliedV) + ' L/tree</title></rect>';
+          '" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3,2"><title>' +
+          t("chart_title_deficit", { day: DAYS[i], v: Math.round(demandV - appliedV) }) + '</title></rect>';
       }
 
       var dateLabel = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : "";
       marks += '<text x="' + cx + '" y="' + (H - padBottom + 16) + '" font-size="11" fill="var(--ink)" text-anchor="middle" font-family="var(--font-body)">' +
-        DAYS[i].slice(0, 3) + '</text>';
+        DAYS_SHORT[i] + '</text>';
       if(dateLabel){
         marks += '<text x="' + cx + '" y="' + (H - padBottom + 30) + '" font-size="9" fill="var(--muted)" text-anchor="middle" font-family="var(--font-mono)">' +
           dateLabel + '</text>';
@@ -2420,21 +2419,21 @@
 
     var legend =
       '<g font-size="10" font-family="var(--font-body)">' +
-        '<rect x="' + padLeft + '" y="2" width="10" height="10" fill="var(--avocado)"></rect><text x="' + (padLeft + 14) + '" y="11" fill="var(--ink)">Demand</text>' +
-        '<rect x="' + (padLeft + 80) + '" y="2" width="10" height="10" fill="var(--water)"></rect><text x="' + (padLeft + 94) + '" y="11" fill="var(--ink)">Applied</text>' +
-        '<rect x="' + (padLeft + 160) + '" y="2" width="10" height="10" fill="var(--muted)" opacity="0.55"></rect><text x="' + (padLeft + 174) + '" y="11" fill="var(--ink)">Rest day (hypothetical)</text>' +
+        '<rect x="' + padLeft + '" y="2" width="10" height="10" fill="var(--avocado)"></rect><text x="' + (padLeft + 14) + '" y="11" fill="var(--ink)">' + t("chart_legendDemand") + '</text>' +
+        '<rect x="' + (padLeft + 80) + '" y="2" width="10" height="10" fill="var(--water)"></rect><text x="' + (padLeft + 94) + '" y="11" fill="var(--ink)">' + t("chart_legendApplied") + '</text>' +
+        '<rect x="' + (padLeft + 160) + '" y="2" width="10" height="10" fill="var(--muted)" opacity="0.55"></rect><text x="' + (padLeft + 174) + '" y="11" fill="var(--ink)">' + t("chart_legendRest") + '</text>' +
       '</g>';
 
     wrap.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:700px;display:block;">' + legend + marks + '</svg>';
-    wrap.setAttribute("aria-label", "Bar chart comparing each day's gross water demand to the gross amount actually applied: " +
+    wrap.setAttribute("aria-label", t("chart_ariaIntro") + " " +
       DAYS.map(function(_, i){
-        return DAYS[i] + " demand " + Math.round(demandForChart[i]) + " liters per tree, applied " + Math.round(litersPerTree[i]) + " liters per tree";
+        return t("chart_ariaDay", { day: DAYS[i], demand: Math.round(demandForChart[i]), applied: Math.round(litersPerTree[i]) });
       }).join("; "));
 
     tbody.innerHTML = DAYS.map(function(_, i){
       var demandV = demandForChart[i], appliedV = litersPerTree[i];
       var dateLabel = state.weekDates && state.weekDates[i] ? " (" + formatDate(state.weekDates[i]) + ")" : "";
-      return "<tr><td>" + DAYS[i] + dateLabel + (i === restDay ? " — rest day" : "") + "</td>" +
+      return "<tr><td>" + DAYS[i] + dateLabel + (i === restDay ? " — " + t("chart_restDayLabel") : "") + "</td>" +
         '<td class="num">' + Math.round(demandV) + "</td>" +
         '<td class="num">' + Math.round(appliedV) + "</td>" +
         '<td class="num">' + (i === restDay ? "—" : Math.round(Math.max(0, demandV - appliedV))) + "</td></tr>";
@@ -2541,18 +2540,18 @@
       var nameDiv = document.createElement("div");
       nameDiv.className = "day-name";
       var sub = state.weekDates && state.weekDates[i] ? formatDate(state.weekDates[i]) : name;
-      if(isActuallyToday) sub += " · today";
+      if(isActuallyToday) sub += " · " + t("card_today");
       // Provenance is visible, not just internally tracked — the brief's own complaint was a label
       // that could be edited without any sign of whether that changed a real number.
-      sub += rec.source === "live" ? " · live" : "";
-      nameDiv.innerHTML = name.slice(0,3) + "<small>"+sub+"</small>";
+      sub += rec.source === "live" ? " · " + t("card_live") : "";
+      nameDiv.innerHTML = DAYS_SHORT[i] + "<small>"+sub+"</small>";
       card.appendChild(nameDiv);
 
       var sel = document.createElement("select");
       sel.innerHTML =
-        '<option value="hot">Hot</option>' +
-        '<option value="normal">Normal</option>' +
-        '<option value="rainy">Rainy</option>';
+        '<option value="hot">' + t("weather_hot") + '</option>' +
+        '<option value="normal">' + t("weather_normal") + '</option>' +
+        '<option value="rainy">' + t("weather_rainy") + '</option>';
       sel.value = rec.weather;
       sel.addEventListener("change", function(){
         var r = dayAt(i);
@@ -2578,7 +2577,7 @@
       rainInput.type = "number";
       rainInput.min = "0";
       rainInput.step = "1";
-      rainInput.placeholder = "rain mm";
+      rainInput.placeholder = t("card_rainPlaceholder");
       rainInput.value = rec.rainfall || "";
       rainInput.style.display = rec.weather === "rainy" ? "block" : "none";
       rainInput.addEventListener("input", function(){
@@ -2590,7 +2589,7 @@
         var hint = document.createElement("small");
         hint.style.color = "var(--water)";
         hint.style.fontSize = "0.68rem";
-        hint.textContent = "+" + rec.rainfall + "mm forecast, credited anyway";
+        hint.textContent = t("card_rainCreditedAnyway", { mm: rec.rainfall });
         rainWrap.appendChild(hint);
       }
       sel.addEventListener("change", function(){
@@ -2619,7 +2618,7 @@
     toggleInput.type = "checkbox";
     toggleInput.checked = sensor.enabled;
     toggleLabel.appendChild(toggleInput);
-    toggleLabel.appendChild(document.createTextNode(" I have a real sensor reading for right now"));
+    toggleLabel.appendChild(document.createTextNode(" " + t("sensor_toggle")));
     wrap.appendChild(toggleLabel);
 
     var fieldsWrap = document.createElement("div");
@@ -2631,7 +2630,7 @@
     moistureField.step = "0.01";
     moistureField.min = "0";
     moistureField.max = "1";
-    moistureField.placeholder = "soil moisture, m³/m³ (e.g. 0.20)";
+    moistureField.placeholder = t("sensor_moisturePlaceholder");
     moistureField.value = sensor.moistureVal != null ? sensor.moistureVal : "";
     moistureField.addEventListener("input", function(){
       sensor.moistureVal = moistureField.value === "" ? null : Number(moistureField.value);
@@ -2643,7 +2642,7 @@
     etField.type = "number";
     etField.step = "0.1";
     etField.min = "0";
-    etField.placeholder = "measured evapotranspiration, mm (e.g. 3.5)";
+    etField.placeholder = t("sensor_etPlaceholder");
     etField.value = sensor.etVal != null ? sensor.etVal : "";
     etField.addEventListener("input", function(){
       sensor.etVal = etField.value === "" ? null : Number(etField.value);
@@ -2652,13 +2651,13 @@
     fieldsWrap.appendChild(etField);
 
     var hintParts = [];
-    if(modelHint.moisture != null) hintParts.push("modeled moisture ~" + modelHint.moisture.toFixed(2) + " m³/m³");
-    if(typeof dayAt(TODAY_IDX).et0 === "number") hintParts.push("modeled ET0 ~" + dayAt(TODAY_IDX).et0.toFixed(1) + "mm");
+    if(modelHint.moisture != null) hintParts.push(t("sensor_hintMoisture", { v: modelHint.moisture.toFixed(2) }));
+    if(typeof dayAt(TODAY_IDX).et0 === "number") hintParts.push(t("sensor_hintEt0", { v: dayAt(TODAY_IDX).et0.toFixed(1) }));
     var hint = document.createElement("small");
     hint.className = "sensor-hint";
     hint.textContent = hintParts.length ?
-      "For reference (" + hintParts.join(", ") + ") — your real reading overrides this." :
-      "Pull a live forecast for a modeled reference value, or just enter your own reading.";
+      t("sensor_hintForReference", { parts: hintParts.join(", ") }) :
+      t("sensor_hintNoData");
     fieldsWrap.appendChild(hint);
 
     wrap.appendChild(fieldsWrap);
@@ -2680,7 +2679,7 @@
       wrap.className = "field";
       wrap.style.marginBottom = "0";
       var label = document.createElement("label");
-      label.textContent = name.slice(0,3);
+      label.textContent = DAYS_SHORT[i];
       var input = document.createElement("input");
       input.type = "number";
       input.min = "0";
@@ -2697,23 +2696,22 @@
   }
 
   function weatherLabel(w){
-    if(w === "hot") return '<span class="pill hot">Hot</span>';
-    if(w === "rainy") return '<span class="pill rainy">Rainy</span>';
-    return '<span class="pill normal">Normal</span>';
+    if(w === "hot") return '<span class="pill hot">' + t("weather_hot") + '</span>';
+    if(w === "rainy") return '<span class="pill rainy">' + t("weather_rainy") + '</span>';
+    return '<span class="pill normal">' + t("weather_normal") + '</span>';
   }
 
   function noteFor(w, isRest, capped, litersPerTree, rainMm){
-    if(isRest) return "Rest day — no irrigation.";
-    if(capped) return "Capped at the pump's flow rate for the window; make up any shortfall the next irrigation day.";
+    if(isRest) return t("note_rest");
+    if(capped) return t("note_capped");
     if(rainMm > 0 && litersPerTree <= 0){
-      return "Rainfall (" + rainMm + "mm) already covers the day's need — skipped to avoid over-watering and root rot.";
+      return t("note_rainSkip", { mm: rainMm });
     }
     if(rainMm > 0){
-      return "Rainfall (" + rainMm + "mm) credited against today's need — topped up only the rest, never beyond it." +
-        (w === "hot" ? " Heat still pushes the baseline need up." : "");
+      return t("note_rainCredit", { mm: rainMm }) + (w === "hot" ? " " + t("note_rainCreditHot") : "");
     }
-    if(w === "hot") return "Heat raises evapotranspiration — watered above baseline, capped at the estimated need.";
-    return "Baseline demand for a normal day.";
+    if(w === "hot") return t("note_hot");
+    return t("note_normal");
   }
 
   function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation){
@@ -2730,8 +2728,9 @@
     var irrigationDays = restDay >= 0 ? 6 : 7;
 
     var parts = [];
-    parts.push("Water " + irrigationDays + " of 7 days this week" +
-      (restDay >= 0 ? ", skipping " + DAYS[restDay] + " (rest day)" : "") + ".");
+    parts.push(restDay >= 0 ?
+      t("narr_waterDaysWithRest", { days: irrigationDays, day: DAYS[restDay] }) :
+      t("narr_waterDaysNoRest", { days: irrigationDays }));
 
     if(compensation){
       // Whether the tree actually ends up whole depends on whether the budget/pump constraints,
@@ -2741,77 +2740,65 @@
       var hasBefore = compensation.beforeIdx !== -1, hasAfter = compensation.afterIdx !== -1;
       var redistSentence;
       if(hasBefore && hasAfter){
-        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) + " L/tree) isn't lost — " +
-          (compensation.storageAware ?
-            "about " + Math.ceil(compensation.beforeAmount) + " L/tree is advanced onto " + DAYS[compensation.beforeIdx] +
-              " (as much as the soil can actually hold before " + DAYS[restDay] + "), and about " +
-              Math.ceil(compensation.afterAmount) + " L/tree makes up on " + DAYS[compensation.afterIdx] +
-              " whatever that still leaves short." :
-            "half is added to " + DAYS[compensation.beforeIdx] + " so the soil goes into the rest day already moist, " +
-              "and half to " + DAYS[compensation.afterIdx] + " to make up the rest.");
+        redistSentence = t(compensation.storageAware ? "narr_compBoth_storage" : "narr_compBoth_flat", {
+          day: DAYS[restDay], amt: Math.ceil(compensation.perTree),
+          beforeDay: DAYS[compensation.beforeIdx], afterDay: DAYS[compensation.afterIdx],
+          beforeAmt: Math.ceil(compensation.beforeAmount), afterAmt: Math.ceil(compensation.afterAmount)
+        });
       } else if(hasBefore){
         // restDay is the last day shown this week (e.g. Saturday/Shabbat) — there's no "day after"
         // in THIS view to make up the rest without mislabeling an earlier day as post-rest-day
         // recovery (see the code comment where beforeIdx/afterIdx are computed). Whatever advance
         // watering can't cover is disclosed as carryover into next week instead.
-        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) + " L/tree) is" +
-          (compensation.storageAware ? " partly" : "") + " advanced onto " + DAYS[compensation.beforeIdx] +
-          (compensation.storageAware ? " (about " + Math.ceil(compensation.beforeAmount) + " L/tree, as much as the soil can hold)" :
-            " (about " + Math.ceil(compensation.beforeAmount) + " L/tree)") +
-          " — there's no day after " + DAYS[restDay] + " in this week's view to make up the rest without crediting an earlier day for it" +
-          (compensation.carryoverPerTree > 0.5 ? "; about " + Math.ceil(compensation.carryoverPerTree) + " L/tree carries into next week instead." : ".");
+        redistSentence = t(compensation.storageAware ? "narr_compBeforeOnly_storage" : "narr_compBeforeOnly_flat", {
+          day: DAYS[restDay], amt: Math.ceil(compensation.perTree),
+          beforeDay: DAYS[compensation.beforeIdx], beforeAmt: Math.ceil(compensation.beforeAmount)
+        }) + (compensation.carryoverPerTree > 0.5 ? " " + t("narr_carryover", { amt: Math.ceil(compensation.carryoverPerTree) }) : "");
       } else if(hasAfter){
-        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) + " L/tree) is made up on " +
-          DAYS[compensation.afterIdx] + " (about " + Math.ceil(compensation.afterAmount) + " L/tree) — there's no day before " +
-          DAYS[restDay] + " in this week's view to advance-water from.";
+        redistSentence = t("narr_compAfterOnly", {
+          day: DAYS[restDay], amt: Math.ceil(compensation.perTree),
+          afterDay: DAYS[compensation.afterIdx], afterAmt: Math.ceil(compensation.afterAmount)
+        });
       } else {
-        redistSentence = DAYS[restDay] + "'s skipped water (about " + Math.ceil(compensation.perTree) +
-          " L/tree) has no other day in this week's view to redistribute onto.";
+        redistSentence = t("narr_compNeither", { day: DAYS[restDay], amt: Math.ceil(compensation.perTree) });
       }
       parts.push(redistSentence +
-        (hasBefore && hasAfter && compensationMadeWhole ?
-          " The tree still gets its full week of water, just not on the rest day." :
-          hasBefore && hasAfter ?
-          " Whether that fully makes up for the rest day depends on the budget and pump limits below." : ""));
+        (hasBefore && hasAfter && compensationMadeWhole ? " " + t("narr_fullWeek") :
+          hasBefore && hasAfter ? " " + t("narr_dependsOnLimits") : ""));
     } else if(restDay >= 0){
-      parts.push(DAYS[restDay] + " wasn't forecast to need water anyway, so nothing needs making up.");
+      parts.push(t("narr_restNotNeeded", { day: DAYS[restDay] }));
     }
 
     if(hotDays.length && normalIdx !== -1){
-      parts.push(hotDays.join(" and ") + " run hottest — about " + Math.floor(litersPerTree[hotIdx]) +
-        " L/tree, versus " + Math.floor(litersPerTree[normalIdx]) + " L/tree on a normal day.");
+      parts.push(t("narr_hotVsNormal", { days: joinList(hotDays), hotL: Math.floor(litersPerTree[hotIdx]), normalL: Math.floor(litersPerTree[normalIdx]) }));
     } else if(hotDays.length){
-      parts.push(hotDays.join(" and ") + " run hottest — about " + Math.floor(litersPerTree[hotIdx]) + " L/tree.");
+      parts.push(t("narr_hotOnly", { days: joinList(hotDays), hotL: Math.floor(litersPerTree[hotIdx]) }));
     }
 
     if(rainyDays.length){
+      var rainyKey = rainyDays.length > 1 ? "_pl" : "_sg";
       if(litersPerTree[rainyIdx] <= 0){
-        parts.push(rainyDays.join(" and ") + " " + (rainyDays.length > 1 ? "get" : "gets") +
-          " enough rain to skip irrigation entirely — watering on top of that would risk root rot.");
+        parts.push(t("narr_rainySkip" + rainyKey, { days: joinList(rainyDays) }));
       } else {
-        parts.push(rainyDays.join(" and ") + " " + (rainyDays.length > 1 ? "get" : "gets") +
-          " cut back for rain — about " + Math.floor(litersPerTree[rainyIdx]) + " L/tree.");
+        parts.push(t("narr_rainyCut" + rainyKey, { days: joinList(rainyDays), rainyL: Math.floor(litersPerTree[rainyIdx]) }));
       }
     }
 
     if(hotIdx !== -1 && windows[hotIdx] && windows[hotIdx].dataBacked){
-      parts.push("Best window on " + DAYS[hotIdx] + ": " + formatWindow(windows[hotIdx], 2) + ", the driest stretch in the hourly forecast.");
+      parts.push(t("narr_bestWindow", { day: DAYS[hotIdx], window: formatWindow(windows[hotIdx], 2) }));
     }
 
     // These two constraints are independent, so both get reported when both apply — a plan that's
     // simultaneously pump-capped on one day and budget-trimmed across every day shouldn't only
     // mention one of them.
     if(scale < 0.999){
-      parts.push("Raw demand outran the weekly budget, so every irrigation day was trimmed by about " +
-        Math.round((1 - scale) * 100) + "%.");
+      parts.push(t("narr_budgetTrim", { pct: Math.round((1 - scale) * 100) }));
     }
     if(cappedDays.length){
-      parts.push("Pump flow limits " + cappedDays.length + " day(s) (" + cappedDays.join(", ") +
-        ") below the model's target — plan a top-up on the next irrigation day.");
+      parts.push(t("narr_pumpCapped", { n: cappedDays.length, days: joinList(cappedDays) }));
     }
     if(scale >= 0.999 && !cappedDays.length){
-      parts.push("Total use is " + Math.floor(weeklyFinal).toLocaleString() + " L, " + pctUsed.toFixed(0) +
-        "% of the " + budget.toLocaleString() + " L budget — comfortably inside both the budget and the pump.");
+      parts.push(t("narr_comfortable", { total: Math.floor(weeklyFinal).toLocaleString(), pct: pctUsed.toFixed(0), budget: budget.toLocaleString() }));
     }
 
     return parts.join(" ");
@@ -3108,9 +3095,9 @@
       var whenHtml = (!isRest && litersPerTree[i] > 0) ?
         '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
       var compBadge = compensation && (i === compensation.beforeIdx || i === compensation.afterIdx) ?
-        '<div class="pc-comp">+' + DAYS[restDay].slice(0,3) + " top-up</div>" : "";
+        '<div class="pc-comp">+' + DAYS_SHORT[restDay] + " " + t("topUp") + "</div>" : "";
       div.innerHTML =
-        '<div class="pc-day">' + name.slice(0,3) + dateSub + '</div>' +
+        '<div class="pc-day">' + DAYS_SHORT[i] + dateSub + '</div>' +
         (isRest ? '<span class="pill rest">Rest</span>' : weatherLabel(dayAt(i).weather)) +
         '<div class="pc-liters">' + litersPerTree[i] + '<span class="pc-unit">L / tree</span></div>' +
         '<div class="pc-total">' + plotTotal[i].toLocaleString() + ' L total</div>' +
