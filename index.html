@@ -658,6 +658,20 @@
     <p class="computed-stat" id="feasibilityNote"></p>
     <p class="computed-stat" id="dailyCapSummary"></p>
 
+    <div id="zoneConfigSection" hidden>
+      <p class="computed-stat" id="zoneBlockedNote" style="color:var(--warn);font-weight:600;"></p>
+      <div class="field">
+        <label for="numZones" data-i18n="zone_numZones">Number of sequential zones</label>
+        <input type="number" id="numZones" value="1" min="1" max="12" step="1">
+      </div>
+      <div id="zoneRows"></div>
+      <p class="computed-stat" id="zoneReconcileNote"></p>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin-bottom:6px;">
+        <input type="checkbox" id="zonesConfirmed"> <span data-i18n="zone_confirm">I've confirmed these zones are physically installed and operable — not just a suggestion</span>
+      </label>
+      <p style="font-size:0.78rem;color:var(--muted);margin:0 0 10px;" data-i18n="zone_disclaimer">This is a simplified flow check (zone emitter demand vs. pump rating) — not a complete pressure-network/hydraulic design. Confirm real feasibility with whoever installs or services the system.</p>
+    </div>
+
     <div class="field">
       <label for="restday" data-i18n="plot_restday">Rest day — no irrigation</label>
       <select id="restday">
@@ -1003,8 +1017,19 @@
       day_sun: "Sunday", day_mon: "Monday", day_tue: "Tuesday", day_wed: "Wednesday", day_thu: "Thursday", day_fri: "Friday",
 
       hw_feasible: "Watering all {trees} trees at once needs {flow} L/h — within the pump's {pump} L/h capacity.",
-      hw_infeasible: "Watering all {trees} trees at once would need {flow} L/h, but the pump only supplies {pump} L/h — whole-plot operation isn't feasible. This plan schedules at the pump's actual rate, which means it takes longer (or delivers less) than running everything at once would; splitting into roughly {zones} sequential zones would close that gap, but no zones are configured here.",
+      hw_infeasible: "Watering all {trees} trees at once would need {flow} L/h, but the pump only supplies {pump} L/h — whole-plot operation isn't feasible. This plan is BLOCKED until that's resolved: configure and confirm feasible sequential zones below (about {zones} would close the gap), or adjust the pump/demand — it does not silently schedule at a reduced rate instead.",
+      hw_feasibleZoned: "Watering all {trees} trees at once would need {flow} L/h, more than the pump's {pump} L/h — but {n} confirmed sequential zones, each within the pump's own rating, make this feasible: the whole plot still gets watered this way, just not all at once.",
       hw_dailyCapSummary: "= {dailyCap} L/day ceiling, delivered at {flow} L/h",
+      zone_numZones: "Number of sequential zones",
+      zone_confirm: "I've confirmed these zones are physically installed and operable — not just a suggestion",
+      zone_disclaimer: "This is a simplified flow check (zone emitter demand vs. pump rating) — not a complete pressure-network/hydraulic design. Confirm real feasibility with whoever installs or services the system.",
+      zone_treeLabel: "Zone {n} — trees",
+      zone_blockedNote: "Blocked: whole-plot flow ({flow} L/h) exceeds the pump's {pump} L/h rating, and no confirmed, feasible zone configuration is in place yet. Configure the zones below and confirm them, or adjust the pump/demand, before this plan can schedule any real irrigation times.",
+      zone_confirmedNote: "Confirmed: {n} sequential zones, each within the pump's rating.",
+      zone_reconcileMismatch: "Zone tree counts add up to {sum}, but the plot has {trees} trees — these must match exactly before zones can be confirmed.",
+      zone_reconcileOk: "Zone tree counts add up to {sum}, matching the plot's {trees} trees.",
+      zone_someInfeasible: "At least one zone's own demand (its tree count &times; emitter flow) still exceeds the pump's capacity — reduce that zone's tree count or add more zones.",
+      zone_dailyCapBlocked: "Blocked — no deliverable daily volume until zones are configured and confirmed",
 
       forecast_eyebrow: "This week",
       forecast_heading: "What's the forecast?",
@@ -1063,6 +1088,7 @@
       weather_hot: "Hot", weather_normal: "Normal", weather_rainy: "Rainy",
       note_rest: "Rest day — no irrigation.",
       note_capped: "Capped at the pump's flow rate for the window; make up any shortfall the next irrigation day.",
+      note_blocked: "Blocked — this day has real demand, but whole-plot operation isn't hydraulically feasible and no confirmed zone configuration is in place. Nothing is scheduled here until that's resolved above.",
       note_rainSkip: "Rainfall ({mm}mm) already covers the day's need — skipped to avoid over-watering and root rot.",
       note_rainCredit: "Rainfall ({mm}mm) credited against today's need — topped up only the rest, never beyond it.",
       note_rainCreditHot: "Heat still pushes the baseline need up.",
@@ -1090,6 +1116,7 @@
       narr_bestWindow: "Best window on {day}: {window}, the driest stretch in the hourly forecast.",
       narr_budgetTrim: "Raw demand outran the weekly budget, so every irrigation day was trimmed by about {pct}%.",
       narr_pumpCapped: "Pump flow limits {n} day(s) ({days}) below the model's target — plan a top-up on the next irrigation day.",
+      narr_blocked: "This plan is BLOCKED, not scheduled: whole-plot operation needs {flow} L/h but the pump supplies only {pump} L/h, and no confirmed, feasible zone configuration is in place. Configure and confirm zones above (or adjust pump/demand) before any real irrigation times can be scheduled.",
       narr_comfortable: "Total use is {total} L, {pct}% of the {budget} L budget — comfortably inside both the budget and the pump.",
 
       card_today: "today",
@@ -1148,6 +1175,7 @@
 
       sched_noIrrigation: "No irrigation",
       sched_skipNoWatering: "Skip — no watering needed",
+      sched_blocked: "Blocked — hardware configuration required",
       sched_defaultSlot: "default slot",
       sched_sensorAdjusted: "Adjusted using your sensor reading for today.",
       sched_compBoth: "That water isn't lost — split between {beforeDay} and {afterDay}.",
@@ -1191,6 +1219,8 @@
       formulas_hwHeading: "Hardware feasibility.",
       formulas_hwFeasible: "feasible",
       formulas_hwInfeasible: "NOT feasible (scheduled at the pump's actual rate instead, which under-delivers vs. the all-at-once ideal)",
+      formulas_hwZoned: "feasible via {n} confirmed sequential zones, each individually within the pump's rating",
+      formulas_hwBlocked: "BLOCKED — not feasible as a whole plot, and no confirmed feasible zone configuration is in place; no schedule is generated until that's resolved",
       formulas_hw: "All {trees} trees at once need <code>trees &times; emitterFlow</code> = {zoneFlow} L/h; the pump supplies {pump} L/h, so whole-plot operation is {feasible}. Effective flow = <code>min(zoneDemandFlow, pumpCapacity)</code> = {effFlow} L/h; daily cap = <code>effectiveFlow &times; maxHours</code> = {dailyCap} L/day. Event duration = <code>volume &divide; effectiveFlow</code>, kept to minute precision, never rounded up to a whole hour. This is a simplified capacity check (whole-plot flow vs. pump rating only), not a pressure-network/hydraulic design — no zones are modeled.",
       formulas_budgetActive: "Budget scaling — active.",
       formulas_budgetActiveDetail: "Raw weekly demand {raw} L exceeds the {budget} L budget, so every irrigation day is scaled by <code>budget &divide; rawWeeklyTotal</code> = {scale}% before hardware capping is applied.",
@@ -1295,8 +1325,19 @@
       day_sun: "ראשון", day_mon: "שני", day_tue: "שלישי", day_wed: "רביעי", day_thu: "חמישי", day_fri: "שישי",
 
       hw_feasible: "השקיית כל {trees} העצים בבת אחת דורשת {flow} ליטר/שעה — בתוך קיבולת המשאבה של {pump} ליטר/שעה.",
-      hw_infeasible: "השקיית כל {trees} העצים בבת אחת הייתה דורשת {flow} ליטר/שעה, אך המשאבה מספקת רק {pump} ליטר/שעה — הפעלת כל החלקה בבת אחת אינה אפשרית. התוכנית הזו מתזמנת בקצב האמיתי של המשאבה, כלומר לוקח יותר זמן (או מספקת פחות) מאשר הפעלת הכול בבת אחת; פיצול לכ-{zones} אזורים עוקבים היה סוגר את הפער, אך לא הוגדרו כאן אזורים.",
+      hw_infeasible: "השקיית כל {trees} העצים בבת אחת הייתה דורשת {flow} ליטר/שעה, אך המשאבה מספקת רק {pump} ליטר/שעה — הפעלת כל החלקה בבת אחת אינה אפשרית. התוכנית הזו חסומה עד שזה ייפתר: הגדירו ואשרו למטה אזורים אפשריים (כ-{zones} היו סוגרים את הפער), או התאימו את המשאבה/הביקוש — היא לא מתזמנת בשקט בקצב מופחת במקום זאת.",
+      hw_feasibleZoned: "השקיית כל {trees} העצים בבת אחת הייתה דורשת {flow} ליטר/שעה, יותר מ-{pump} ליטר/שעה של המשאבה — אך {n} אזורים עוקבים מאושרים, כל אחד בתוך הדירוג של המשאבה עצמה, הופכים זאת לאפשרי: כל החלקה עדיין מושקית בדרך הזו, רק לא בבת אחת.",
       hw_dailyCapSummary: "= תקרה של {dailyCap} ליטר/יום, מסופקת בקצב {flow} ליטר/שעה",
+      zone_numZones: "מספר אזורים עוקבים",
+      zone_confirm: "אישרתי שהאזורים האלה מותקנים בפועל וניתנים להפעלה — לא רק הצעה",
+      zone_disclaimer: "זוהי בדיקת זרימה מפושטת (ביקוש הטפטפות באזור מול דירוג המשאבה) — לא תכנון רשת-לחץ הידראולית מלא. אשרו היתכנות אמיתית מול מי שמתקין או מתחזק את המערכת.",
+      zone_treeLabel: "אזור {n} — עצים",
+      zone_blockedNote: "חסום: זרימת כל החלקה ({flow} ליטר/שעה) חורגת מדירוג המשאבה של {pump} ליטר/שעה, ואין עדיין תצורת אזורים מאושרת ואפשרית. הגדירו את האזורים למטה ואשרו אותם, או התאימו את המשאבה/הביקוש, לפני שהתוכנית הזו יכולה לתזמן זמני השקיה אמיתיים כלשהם.",
+      zone_confirmedNote: "מאושר: {n} אזורים עוקבים, כל אחד בתוך דירוג המשאבה.",
+      zone_reconcileMismatch: "סך העצים באזורים הוא {sum}, אך בחלקה יש {trees} עצים — אלה חייבים להתאים בדיוק לפני שניתן לאשר אזורים.",
+      zone_reconcileOk: "סך העצים באזורים הוא {sum}, תואם ל-{trees} העצים בחלקה.",
+      zone_someInfeasible: "הביקוש העצמי של לפחות אזור אחד (מספר העצים שלו &times; ספיקת הטפטפת) עדיין חורג מקיבולת המשאבה — הקטינו את מספר העצים באזור הזה או הוסיפו עוד אזורים.",
+      zone_dailyCapBlocked: "חסום — אין נפח יומי הניתן לאספקה עד שהאזורים יוגדרו ויאושרו",
 
       forecast_eyebrow: "השבוע הזה",
       forecast_heading: "מה התחזית?",
@@ -1355,6 +1396,7 @@
       weather_hot: "חם", weather_normal: "רגיל", weather_rainy: "גשום",
       note_rest: "יום מנוחה — ללא השקיה.",
       note_capped: "מוגבל לקצב הזרימה של המשאבה עבור החלון; השלימו כל גירעון ביום ההשקיה הבא.",
+      note_blocked: "חסום — ליום הזה יש ביקוש אמיתי, אך הפעלת כל החלקה אינה אפשרית הידראולית ואין תצורת אזורים מאושרת. שום דבר לא מתוזמן כאן עד שזה ייפתר למעלה.",
       note_rainSkip: "הגשם ({mm} מ\"מ) כבר מכסה את צורך היום — דולג כדי למנוע עודף השקיה וריקבון שורשים.",
       note_rainCredit: "הגשם ({mm} מ\"מ) זוכה כנגד הצורך של היום — הושלם רק השארית, לעולם לא מעבר לכך.",
       note_rainCreditHot: "החום עדיין דוחף את הצורך הבסיסי כלפי מעלה.",
@@ -1382,6 +1424,7 @@
       narr_bestWindow: "החלון הטוב ביותר ב-{day}: {window}, הקטע היבש ביותר בתחזית השעתית.",
       narr_budgetTrim: "הביקוש הגולמי חרג מהתקציב השבועי, כך שכל יום השקיה קוצץ בכ-{pct}%.",
       narr_pumpCapped: "זרימת המשאבה מגבילה {n} יום/ימים ({days}) מתחת ליעד המודל — תכננו השלמה ביום ההשקיה הבא.",
+      narr_blocked: "התוכנית הזו חסומה, לא מתוזמנת: הפעלת כל החלקה דורשת {flow} ליטר/שעה אך המשאבה מספקת רק {pump} ליטר/שעה, ואין תצורת אזורים מאושרת ואפשרית. הגדירו ואשרו אזורים למעלה (או התאימו את המשאבה/הביקוש) לפני שניתן לתזמן זמני השקיה אמיתיים כלשהם.",
       narr_comfortable: "סך השימוש הוא {total} ליטר, {pct}% מתקציב {budget} הליטר — בנוחות בתוך גם התקציב וגם המשאבה.",
 
       card_today: "היום",
@@ -1440,6 +1483,7 @@
 
       sched_noIrrigation: "ללא השקיה",
       sched_skipNoWatering: "דילוג — לא נדרשת השקיה",
+      sched_blocked: "חסום — נדרשת הגדרת חומרה",
       sched_defaultSlot: "חלון ברירת מחדל",
       sched_sensorAdjusted: "הותאם לפי קריאת החיישן שלכם להיום.",
       sched_compBoth: "המים האלה לא אבודים — מחולקים בין {beforeDay} ל-{afterDay}.",
@@ -1483,6 +1527,8 @@
       formulas_hwHeading: "היתכנות חומרה.",
       formulas_hwFeasible: "אפשרית",
       formulas_hwInfeasible: "אינה אפשרית (מתוזמנת בקצב האמיתי של המשאבה במקום זאת, שמספק פחות מהאידיאל של הפעלת הכול בבת אחת)",
+      formulas_hwZoned: "אפשרית באמצעות {n} אזורים עוקבים מאושרים, כל אחד בתוך דירוג המשאבה בנפרד",
+      formulas_hwBlocked: "חסומה — אינה אפשרית כחלקה שלמה, ואין תצורת אזורים מאושרת ואפשרית; לא נוצר תזמון עד שזה ייפתר",
       formulas_hw: "כל {trees} העצים בבת אחת דורשים <code>עצים &times; ספיקת-טפטפת</code> = {zoneFlow} ליטר/שעה; המשאבה מספקת {pump} ליטר/שעה, כך שהפעלת כל החלקה בבת אחת {feasible}. ספיקה אפקטיבית = <code>min(ביקוש-אזור, קיבולת-משאבה)</code> = {effFlow} ליטר/שעה; תקרה יומית = <code>ספיקה-אפקטיבית &times; שעות-מקסימום</code> = {dailyCap} ליטר/יום. משך האירוע = <code>נפח &divide; ספיקה-אפקטיבית</code>, בדיוק של דקות, לעולם לא מעוגל כלפי מעלה לשעה שלמה. זוהי בדיקת קיבולת מפושטת (זרימת כל החלקה מול דירוג המשאבה בלבד), לא תכנון רשת-לחץ הידראולית — לא מדומים כאן אזורים.",
       formulas_budgetActive: "קיצוץ תקציב — פעיל.",
       formulas_budgetActiveDetail: "הביקוש השבועי הגולמי {raw} ליטר חורג מתקציב {budget} הליטר, כך שכל יום השקיה מוקטן ב-<code>תקציב &divide; סך-גולמי-שבועי</code> = {scale}% לפני הגבלת החומרה.",
@@ -2584,7 +2630,8 @@
     parts.push("<p><strong>" + t("formulas_hwHeading") + "</strong> " +
       t("formulas_hw", {
         trees: ctx.trees.toLocaleString(), zoneFlow: Math.round(ctx.zoneDemandFlow).toLocaleString(), pump: ctx.pumpCapacity.toLocaleString(),
-        feasible: ctx.wholePlotFeasible ? t("formulas_hwFeasible") : t("formulas_hwInfeasible"),
+        feasible: ctx.hardwareStatus === "feasible" ? t("formulas_hwFeasible") :
+          ctx.hardwareStatus === "feasible-zoned" ? t("formulas_hwZoned", { n: ctx.numZones }) : t("formulas_hwBlocked"),
         effFlow: Math.round(ctx.effectiveFlow).toLocaleString(), dailyCap: Math.round(ctx.dailyCap).toLocaleString()
       }) + "</p>");
 
@@ -2797,14 +2844,52 @@
     });
   }
 
+  // Rebuilds the per-zone tree-count inputs whenever the zone COUNT changes (audit P0.3: "each
+  // zone needs a tree count and applicable delivery flow"). Flow isn't a separate editable field
+  // per zone — it's derived as zoneTrees x the shared emitterFlow above; a defensible simplifying
+  // assumption (every zone uses the same emitter spec), disclosed in the UI copy, rather than an
+  // extra per-zone input for an edge case this app doesn't otherwise model (mixed emitter types).
+  // Always resets to a fresh even split of the plot's current tree count (remainder on the
+  // earliest zones) rather than carrying over old per-index values from a different zone count —
+  // this function only ever runs when the count itself just changed, so an old zone 0's value
+  // from a 1-zone layout is stale, not a user override worth preserving, and keeping it produces
+  // a default that doesn't even reconcile with the plot (confirmed while testing: switching
+  // 1 zone of 120 trees to 4 zones left zone 1 at the stale 120, summing to 210). Each row stays
+  // independently editable after this; render() re-validates whatever's actually typed.
+  function buildZoneRows(){
+    var n = Math.max(1, Math.min(12, Math.round(numOr("numZones", 1))));
+    var container = $("zoneRows");
+    var trees = Math.max(1, Math.round(numOr("area", 3) * numOr("density", 40)));
+    var base = Math.floor(trees / n), remainder = trees - base * n;
+    container.innerHTML = "";
+    for(var z = 0; z < n; z++){
+      var wrap = document.createElement("div");
+      wrap.className = "field";
+      wrap.style.marginBottom = "6px";
+      var label = document.createElement("label");
+      label.textContent = t("zone_treeLabel", { n: z + 1 });
+      var input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.step = "1";
+      input.className = "zone-trees-input";
+      input.value = base + (z < remainder ? 1 : 0);
+      input.addEventListener("input", render);
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      container.appendChild(wrap);
+    }
+  }
+
   function weatherLabel(w){
     if(w === "hot") return '<span class="pill hot">' + t("weather_hot") + '</span>';
     if(w === "rainy") return '<span class="pill rainy">' + t("weather_rainy") + '</span>';
     return '<span class="pill normal">' + t("weather_normal") + '</span>';
   }
 
-  function noteFor(w, isRest, capped, litersPerTree, rainMm){
+  function noteFor(w, isRest, capped, litersPerTree, rainMm, blocked){
     if(isRest) return t("note_rest");
+    if(blocked) return t("note_blocked");
     if(capped) return t("note_capped");
     if(rainMm > 0 && litersPerTree <= 0){
       return t("note_rainSkip", { mm: rainMm });
@@ -2816,7 +2901,14 @@
     return t("note_normal");
   }
 
-  function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation){
+  function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity){
+    // Blocked overrides everything else below — a hard hardware mismatch with no confirmed,
+    // feasible zone setup means there's no real schedule to narrate at all (audit P0.3/P0.7: a
+    // blocked plan must not look executable in narratives). Said once, plainly, instead of letting
+    // the day-by-day phrasing below describe a schedule that doesn't actually exist.
+    if(hardwareStatus === "blocked"){
+      return t("narr_blocked", { flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString() });
+    }
     var hotIdx = -1, normalIdx = -1, rainyIdx = -1;
     DAYS.forEach(function(d, i){
       if(i === restDay) return;
@@ -2951,25 +3043,74 @@
     var efficiencyPct = Math.max(1, numOr("efficiency", 90)); // 0% would make every gross figure infinite
     var efficiency = efficiencyPct / 100;
 
-    // Watering every tree at once needs trees x emitterFlow L/h. If that's more than the pump can
-    // physically supply, running the whole plot simultaneously is infeasible — not a soft warning,
-    // a hard fact about the hardware. This doesn't silently invent valves/zones to fix it; it reports
-    // the mismatch and schedules at the rate the pump can actually sustain, which under-delivers
-    // relative to the "all trees at once" ideal (consistent with under- rather over-promising).
+    // Watering every tree at once needs trees x emitterFlow L/h. If that exceeds the pump, whole-
+    // plot operation is a hard infeasibility, not a soft warning — audit P0.3: never treat
+    // min(emitter demand, pump capacity) as proof every emitter operates normally. This app does
+    // not silently invent installed valves/zones to paper over a real mismatch: scheduling proceeds
+    // only if either (a) the whole plot genuinely fits, or (b) the grower has configured AND
+    // explicitly confirmed a sequential-zone setup where every zone individually fits the pump.
     var zoneDemandFlow = trees * emitterFlow;
     var wholePlotFeasible = pumpCapacity <= 0 ? zoneDemandFlow <= 0 : zoneDemandFlow <= pumpCapacity;
-    var effectiveFlow = pumpCapacity > 0 ? Math.min(zoneDemandFlow, pumpCapacity) : 0;
-    $("feasibilityNote").textContent = wholePlotFeasible ?
-      t("hw_feasible", { trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString() }) :
-      t("hw_infeasible", {
-        trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString(),
-        zones: Math.ceil(zoneDemandFlow / Math.max(1, pumpCapacity))
-      });
-    var dailyCap = effectiveFlow * maxHours;
-    $("dailyCapSummary").innerHTML = t("hw_dailyCapSummary", {
-      dailyCap: "<strong>" + Math.round(dailyCap).toLocaleString() + "</strong>",
-      flow: "<strong>" + Math.round(effectiveFlow).toLocaleString() + "</strong>"
+
+    var numZones = Math.max(1, Math.min(12, Math.round(numOr("numZones", 1))));
+    var zoneTreeCounts = Array.from(document.querySelectorAll("#zoneRows .zone-trees-input")).map(function(el){ return Math.max(0, Math.round(Number(el.value) || 0)); });
+    var zonesConfirmed = $("zonesConfirmed").checked;
+    var zoneTreeSum = zoneTreeCounts.reduce(function(a, b){ return a + b; }, 0);
+    var zonesReconcile = zoneTreeCounts.length === numZones && zoneTreeSum === trees;
+    var zoneFlows = zoneTreeCounts.map(function(zt){ return zt * emitterFlow; });
+    var allZonesFeasible = zoneFlows.length > 0 && zoneFlows.every(function(f){ return pumpCapacity > 0 && f <= pumpCapacity; });
+    var zonesValid = zonesReconcile && allZonesFeasible;
+    // Three real states, not a binary feasible/not — "feasible-zoned" is hydraulically sound
+    // (every zone fits the pump) but still requires the explicit confirmation checkbox; an
+    // unconfirmed-but-otherwise-valid configuration stays blocked until the grower actually ticks
+    // it, since a zone layout no one has confirmed is still just a suggestion.
+    var hardwareStatus = wholePlotFeasible ? "feasible" :
+      (zonesConfirmed && zonesValid) ? "feasible-zoned" : "blocked";
+
+    $("zoneConfigSection").hidden = wholePlotFeasible;
+    if(!wholePlotFeasible){
+      $("zoneBlockedNote").innerHTML = hardwareStatus === "blocked" ?
+        '<strong style="color:var(--warn);">' + t("zone_blockedNote", { flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString() }) + '</strong>' :
+        t("zone_confirmedNote", { n: numZones });
+      $("zoneReconcileNote").innerHTML = !zonesReconcile ?
+        '<strong style="color:var(--warn);">' + t("zone_reconcileMismatch", { sum: zoneTreeSum, trees: trees }) + '</strong>' :
+        !allZonesFeasible ?
+        '<strong style="color:var(--warn);">' + t("zone_someInfeasible") + '</strong>' :
+        t("zone_reconcileOk", { sum: zoneTreeSum, trees: trees });
+    }
+
+    // Effective flow / daily cap depend on the ACTUAL hardware status, never a plain min()
+    // shortcut alone. For confirmed, feasible zones (sequential, each individually within the
+    // pump's rating), per-tree duration is the same regardless of how trees are split across
+    // zones — splitting N ways multiplies total daily runtime by N, since only one zone's worth
+    // of flow runs at any instant (the rest wait their turn). Blocked means no deliverable volume
+    // at all until hardware is actually sorted out — not a smaller number standing in for zero.
+    var effectiveFlow, dailyCap;
+    if(hardwareStatus === "blocked"){
+      effectiveFlow = 0;
+      dailyCap = 0;
+    } else if(hardwareStatus === "feasible-zoned"){
+      effectiveFlow = zoneDemandFlow / numZones;
+      dailyCap = effectiveFlow * maxHours;
+    } else {
+      effectiveFlow = pumpCapacity > 0 ? Math.min(zoneDemandFlow, pumpCapacity) : 0;
+      dailyCap = effectiveFlow * maxHours;
+    }
+
+    $("feasibilityNote").textContent = wholePlotFeasible ? t("hw_feasible", {
+      trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString()
+    }) : hardwareStatus === "feasible-zoned" ? t("hw_feasibleZoned", {
+      trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString(), n: numZones
+    }) : t("hw_infeasible", {
+      trees: trees.toLocaleString(), flow: Math.round(zoneDemandFlow).toLocaleString(), pump: pumpCapacity.toLocaleString(),
+      zones: Math.ceil(zoneDemandFlow / Math.max(1, pumpCapacity))
     });
+    $("dailyCapSummary").innerHTML = hardwareStatus === "blocked" ?
+      '<strong style="color:var(--warn);">' + t("zone_dailyCapBlocked") + '</strong>' :
+      t("hw_dailyCapSummary", {
+        dailyCap: "<strong>" + Math.round(dailyCap).toLocaleString() + "</strong>",
+        flow: "<strong>" + Math.round(effectiveFlow).toLocaleString() + "</strong>"
+      });
     var restDay = Number($("restday").value);
 
     // ET demand minus real rainfall, never negative, never topped up beyond need. Computed for
@@ -3185,7 +3326,7 @@
       return pickIrrigationWindow(hourlyArr, hoursNeeded[i], i === dayBeforeRest);
     });
 
-    $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation);
+    $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity);
     renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree, efficiency);
     renderDemandChart(ownNeed, litersPerTree, restDay, compensation);
     renderFormulasPanel({
@@ -3195,6 +3336,7 @@
       canopyCoverage: canopyCoverage, canopyFactor: canopyFactor, growthStage: $("growthStage").value,
       budget: budget, emitterFlow: emitterFlow, pumpCapacity: pumpCapacity, maxHours: maxHours, efficiency: efficiency, efficiencyPct: efficiencyPct,
       zoneDemandFlow: zoneDemandFlow, wholePlotFeasible: wholePlotFeasible, effectiveFlow: effectiveFlow, dailyCap: dailyCap,
+      hardwareStatus: hardwareStatus, numZones: numZones,
       restDay: restDay, compensation: compensation, rawWeeklyTotal: rawWeeklyTotal, scale: scale,
       soilCtx: soilCtx, sensorEnabled: sensor.enabled
     });
@@ -3224,7 +3366,9 @@
       var div = document.createElement("div");
       div.className = "plan-card" + (isRest ? " rest" : "") + (capped ? " capped" : "");
       var dateSub = state.weekDates && state.weekDates[i] ? '<span class="pc-date">' + formatDate(state.weekDates[i]) + '</span>' : "";
-      var whenHtml = (!isRest && litersPerTree[i] > 0) ?
+      var blockedHere = hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01;
+      var whenHtml = blockedHere ? '<span class="pc-when" style="color:var(--warn);font-weight:600;">' + t("sched_blocked") + '</span>' :
+        (!isRest && litersPerTree[i] > 0) ?
         '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
       var compBadge = compensation && (i === compensation.beforeIdx || i === compensation.afterIdx) ?
         '<div class="pc-comp">+' + DAYS_SHORT[restDay] + " " + t("topUp") + "</div>" : "";
@@ -3274,7 +3418,15 @@
       var deltaStr = (delta >= 0 ? "+" : "") + Math.round(delta) + " L";
       var barPct = maxLiters > 0 ? Math.round((litersPerTree[i]/maxLiters)*100) : 0;
       var dateLabel = state.weekDates && state.weekDates[i] ? " (" + formatDate(state.weekDates[i]) + ")" : "";
-      var whenCell = isRest ? t("sched_noIrrigation") : litersPerTree[i] <= 0 ? t("sched_skipNoWatering") :
+      // "Blocked" (real demand exists but the hardware mismatch suppressed it to zero) must read
+      // differently from "Skip" (there was never any real demand this day, e.g. rain already
+      // covered it) — both end up with litersPerTree[i] <= 0 through the SAME existing dailyCap
+      // mechanism (dailyCap is 0 when blocked), but they mean opposite things, and showing "no
+      // watering needed" for a day that's actually blocked would be exactly the "looks fully
+      // executable" problem the audit rules out (P0.3/P0.7).
+      var whenCell = isRest ? t("sched_noIrrigation") :
+        (hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01) ? t("sched_blocked") :
+        litersPerTree[i] <= 0 ? t("sched_skipNoWatering") :
         formatWindowLong(windows[i], hoursNeeded[i]) +
         (windows[i].dataBacked ? "" : " <span style=\"color:var(--muted);font-size:0.72rem;\">(" + t("sched_defaultSlot") + ")</span>");
 
@@ -3287,7 +3439,7 @@
         "<td>" + whenCell + "</td>" +
         '<td class="num">' + plotTotal[i].toLocaleString() + "</td>" +
         '<td class="num">' + deltaStr + "</td>" +
-        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0) +
+        "<td>" + noteFor(dayAt(i).weather, isRest, capped, litersPerTree[i], dayAt(i).rainfall||0, hardwareStatus === "blocked" && !isRest && ownNeed[i] > 0.01) +
           (isTodaySlot(i) && sensor.enabled ? " <em>" + t("sched_sensorAdjusted") + "</em>" : "") +
           (compensation && isRest && compensation.beforeIdx !== -1 && compensation.afterIdx !== -1 ?
             " <em>" + t("sched_compBoth", { beforeDay: DAYS[compensation.beforeIdx], afterDay: DAYS[compensation.afterIdx] }) + "</em>" :
@@ -3419,6 +3571,9 @@
     }
     render();
   });
+  $("numZones").addEventListener("input", function(){ buildZoneRows(); render(); });
+  $("zonesConfirmed").addEventListener("change", render);
+  buildZoneRows();
   $("copyBtn").addEventListener("click", copySchedule);
   $("printBtn").addEventListener("click", function(){ window.print(); });
   $("excelBtn").addEventListener("click", exportExcel);
