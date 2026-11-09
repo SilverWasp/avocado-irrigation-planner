@@ -423,6 +423,40 @@
   .theme-toggle svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
   @media print{ .theme-toggle{display:none !important;} }
 
+  /* Fixed top-right regardless of document direction, same as the theme toggle beside it — a
+     small fixed utility control staying in one visual corner in both languages is simpler and
+     less error-prone than flipping it with the rest of the (RTL-aware) page content. */
+  .lang-toggle{
+    position:fixed;
+    top:max(12px, env(safe-area-inset-top,0px));
+    right:max(58px, calc(env(safe-area-inset-right,0px) + 58px));
+    z-index:50;
+    height:40px;
+    min-width:40px;
+    padding:0 10px;
+    border-radius:20px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--ink);
+    cursor:pointer;
+    font-family:var(--font-body);
+    font-size:0.8rem;
+    font-weight:600;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 4px rgba(0,0,0,0.15);
+  }
+  @media print{ .lang-toggle{display:none !important;} }
+
+  /* Keeps a Latin-script number/date/unit reading left-to-right as one visual unit even inside
+     an RTL Hebrew sentence (brief: "unambiguous times/numbers... with bidirectional isolation as
+     needed") instead of the digits and punctuation getting visually reordered by surrounding RTL
+     text (e.g. a date range's dash, or a decimal number next to a unit). */
+  bdi{ unicode-bidi:isolate; }
+
+  html[dir="rtl"] body{ direction:rtl; }
+  html[dir="rtl"] .num{ text-align:left; } /* table number columns stay digit-ordered, not mirrored */
+  html[dir="rtl"] .fetch-status, html[dir="rtl"] .computed-stat{ unicode-bidi:plaintext; }
+
   .print-only{display:none;}
   @media print{
     body{background:#fff;color:#000;padding:0;}
@@ -444,6 +478,7 @@
 <body>
 
 <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch between light and dark"></button>
+<button type="button" id="langToggle" class="lang-toggle" aria-label="Switch language / החלף שפה">EN</button>
 
 <div class="wrap">
 
@@ -836,7 +871,665 @@
     });
   }
 
-  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  // ---------- Language (i18n) ----------
+  // LANG drives both the dictionary-based static-text swap below and every dynamic-string
+  // generator in this file (narrative, formulas panel, chart, soil-balance table, schedule
+  // notes). Persisted the same way as the theme. Hebrew strings here are my own best-effort
+  // translation, not a native speaker's or a professional translator's review. The terms most
+  // worth having a Hebrew speaker verify: soil-texture pedology labels (clay-loam/loam/sandy),
+  // the TAW/RAW/"allowed depletion" terminology, and the choice to leave avocado cultivar names
+  // (Hass, Fuerte, etc.) in Latin script rather than transliterating them.
+  var LANG = (function(){
+    try{ var saved = localStorage.getItem("avocado-lang"); if(saved === "he" || saved === "en") return saved; }catch(e){}
+    return "en";
+  })();
+  function setLang(lang){
+    LANG = (lang === "he") ? "he" : "en";
+    try{ localStorage.setItem("avocado-lang", LANG); }catch(e){}
+    document.documentElement.lang = LANG;
+    document.documentElement.dir = LANG === "he" ? "rtl" : "ltr";
+    applyDayNames();
+    applyStaticTranslations();
+    renderLangButton();
+    if(typeof render === "function") render();
+    if(typeof buildCalendar === "function") buildCalendar();
+    if(typeof buildDayCards === "function") buildDayCards();
+  }
+  function renderLangButton(){
+    var btn = $("langToggle");
+    if(!btn) return;
+    btn.textContent = LANG === "he" ? "EN" : "עב"; // shows the language a click switches TO
+    btn.setAttribute("aria-label", LANG === "he" ? "Switch to English" : "עבור לעברית");
+    btn.title = btn.getAttribute("aria-label");
+  }
+  // t(key, vars): looks up I18N[LANG][key], falling back to English, then the bare key itself
+  // (visible-but-harmless if a key is ever missing, rather than throwing). {name} tokens in the
+  // string are substituted from `vars`.
+  function t(key, vars){
+    var dict = I18N[LANG] || I18N.en;
+    var str = Object.prototype.hasOwnProperty.call(dict, key) ? dict[key] :
+      (Object.prototype.hasOwnProperty.call(I18N.en, key) ? I18N.en[key] : key);
+    if(vars){
+      Object.keys(vars).forEach(function(k){ str = str.split("{" + k + "}").join(vars[k]); });
+    }
+    return str;
+  }
+  // Walks every [data-i18n]/[data-i18n-html]/[data-i18n-placeholder] element and sets its text
+  // from the dictionary. Static markup only — dynamic content (schedule, narrative, panels) is
+  // handled by the render()/build*() calls setLang() also triggers above.
+  function applyStaticTranslations(){
+    document.querySelectorAll("[data-i18n]").forEach(function(el){ el.textContent = t(el.getAttribute("data-i18n")); });
+    document.querySelectorAll("[data-i18n-html]").forEach(function(el){ el.innerHTML = t(el.getAttribute("data-i18n-html")); });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){ el.placeholder = t(el.getAttribute("data-i18n-placeholder")); });
+    document.querySelectorAll("[data-i18n-aria]").forEach(function(el){ el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria"))); });
+  }
+
+  // Every user-visible string in the app, in both languages. Grouped to roughly match the page's
+  // own section order. Values may contain simple HTML (bold/sub/links) where the original markup
+  // did — safe here since every value is authored by me, never user input.
+  var I18N = {
+    en: {
+      eyebrow_planning: "Irrigation planning",
+      appTitle: "Avocado Irrigation Planner",
+      appIntro: "Pick any spot on the map. It pulls that location's soil and this week's real hourly forecast, and turns it into a day-by-day, hour-by-hour watering plan — liters per tree, kept inside your water budget and pump, biased to water a little less rather than risk root rot. Everything it pulls automatically, you can also override by hand.",
+      mode_eyebrow: "Mode",
+      mode_assignmentBtn: "Assignment example",
+      mode_fieldBtn: "Field planning",
+      mode_assignmentNote: "Fixed, offline demonstration: exactly 2 hot / 1 rainy / 4 normal days, dated to this week's Sunday. Live forecast is disabled here on purpose — the brief it comes from is never meant to be silently replaced by real weather. Switch to Field planning for a real dated week with live data.",
+      loc_eyebrow: "Location",
+      loc_heading: "Where's the plot?",
+      loc_latLabel: "Latitude",
+      loc_lonLabel: "Longitude",
+      loc_refreshBtn: "Refresh data for this spot",
+      loc_soilLabel: "Soil type",
+      loc_soilClay: "Heavy clay-loam (retains moisture)",
+      loc_soilLoam: "Loam",
+      loc_soilSandy: "Sandy / fast-draining",
+      loc_detectSoilBtn: "Try precise live lookup (often unavailable)",
+      loc_soilStatus: "Click anywhere on the map to drop the pin there — soil fills in instantly and reliably from a built-in climate/region table (no network call, so it can't fail). The live lookup button is a bonus for extra precision when that third-party service happens to be up — don't count on it. Override the dropdown any time.",
+
+      soilBal_eyebrow: "Advanced, optional",
+      soilBal_heading: "Soil-water balance (TAW / RAW)",
+      soilBal_intro: "Tracks a root-zone \"bucket\" of stored water from day to day — separate from, and more detailed than, the soil-type multiplier above — so the plan can show real depletion and stress risk, not just a liters total. <strong>Diagnostic only for now:</strong> it reports the risk this week's schedule leaves behind; it does not yet change the schedule itself. Needs real ET&#8320; for a day (Field planning mode + a live forecast pull) to simulate that day — days without it show as not simulated. Defaults below are generic textbook midpoints (<a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, soil water balance</a>), not a validated reading for your plot — replace them with your own soil test or agronomist's figures when you have them.",
+      soilBal_enable: "Enable soil-water balance tracking",
+      soilBal_fc: "Field capacity (% vol.)",
+      soilBal_wp: "Wilting point (% vol.)",
+      soilBal_rootDepth: "Effective root depth (m)",
+      soilBal_depletion: "Allowed depletion (% of TAW)",
+      soilBal_startMoisture: "Start-of-week soil moisture",
+      soilBal_startUnknown: "Unknown — assume right at the refill threshold (depletion = RAW)",
+      soilBal_startFull: "Assume full (just irrigated/rained to field capacity)",
+      soilBal_invalid: "Field capacity ({fc}%) must be greater than wilting point ({wp}%), and root depth must be positive — fix the inputs above to enable the balance.",
+      soilBal_tawRawNote: "TAW (total available water): {taw} mm · RAW (readily available before stress risk): {raw} mm, for a {depth} m root zone.",
+      soilBal_notSimulated: "Not simulated — no live ET&#8320; for this day yet.",
+      soilBal_riskYes: "Yes — past RAW",
+      soilBal_riskNo: "No",
+      soilBal_th_start: "Depletion start (mm)",
+      soilBal_th_rain: "Rain credit (mm)",
+      soilBal_th_irrigation: "Irrigation (mm)",
+      soilBal_th_et: "ET (mm)",
+      soilBal_th_drainage: "Drainage (mm)",
+      soilBal_th_end: "Depletion end (mm)",
+      soilBal_th_risk: "Stress risk",
+      soilBal_caption: "Depletion end is how dry the root-zone bucket is at day close (0 = full, {taw} mm = empty). Stress risk means depletion crossed RAW ({raw} mm) — this reports what the schedule above already does to the soil; it does not change that schedule.",
+
+      plot_eyebrow: "Set once per season",
+      plot_heading: "Plot &amp; pump limits",
+      plot_area: "Plot size (dunam, 1000m&sup2;)",
+      plot_density: "Tree density (trees / dunam)",
+      plot_treesSummary: "= {trees} trees on the plot, about {spacing} m&sup2; of root/canopy zone each",
+      plot_variety: "Avocado variety",
+      plot_growthStage: "Growth stage",
+      plot_stageYoung: "Young (just planted)",
+      plot_stageDeveloping: "Developing",
+      plot_stageMature: "Mature",
+      plot_canopyCoverage: "Actual canopy coverage (%)",
+      plot_canopyNote: "A tree that hasn't filled its canopy footprint yet draws proportionally less water, independent of the land/density reference above. Picking a stage fills in an illustrative coverage (&asymp;50% / 75% / 95%) and a matching root-zone depth for the soil-water balance below — both are editable estimates, not measured figures, so override them if you've actually measured either one. This plan models one uniform zone; if the plot has genuinely mixed ages, plan each age group separately (as its own plot/session) and total the results rather than averaging a stage here.",
+      plot_baseline: "Baseline L / tree on a mild day (ET<sub>c</sub> estimate, for this variety)",
+      plot_budget: "Weekly water budget (L)",
+      plot_emitterFlow: "Emitter flow per tree (L / hour)",
+      plot_pumpCapacity: "Pump capacity (L / hour)",
+      plot_maxHours: "Max irrigation hours / day",
+      plot_efficiency: "System efficiency (%)",
+      plot_restday: "Rest day — no irrigation",
+      plot_restSat: "Saturday (Shabbat)",
+      plot_restNone: "None",
+      day_sun: "Sunday", day_mon: "Monday", day_tue: "Tuesday", day_wed: "Wednesday", day_thu: "Thursday", day_fri: "Friday",
+
+      hw_feasible: "Watering all {trees} trees at once needs {flow} L/h — within the pump's {pump} L/h capacity.",
+      hw_infeasible: "Watering all {trees} trees at once would need {flow} L/h, but the pump only supplies {pump} L/h — whole-plot operation isn't feasible. This plan schedules at the pump's actual rate, which means it takes longer (or delivers less) than running everything at once would; splitting into roughly {zones} sequential zones would close that gap, but no zones are configured here.",
+      hw_dailyCapSummary: "= {dailyCap} L/day ceiling, delivered at {flow} L/h",
+
+      forecast_eyebrow: "This week",
+      forecast_heading: "What's the forecast?",
+      cal_legend: "Greyed dates have no forecast yet (too far ahead or too far in the past) — still pickable, but you'll enter that week by hand.",
+      forecast_manualBtn: "Enter by hand",
+      forecast_liveBtn: "Pull live forecast",
+      forecast_hotThreshold: "Hot-day threshold (&deg;C max)",
+      forecast_rainThreshold: "Rain-day threshold (mm)",
+      forecast_fetchBtn: "Fetch 7-day forecast for this location",
+      forecast_fetchStatus: "Pulls daily and hourly data from Open-Meteo for the pin's coordinates. A day counts as rainy at or above the rain threshold, otherwise hot at or above the temperature threshold, otherwise normal. Edit any day below after pulling.",
+      forecast_fetching: "Fetching the forecast…",
+      forecast_pulled: "Pulled {from} – {to}. Edit any day below if it needs a human override.",
+      forecast_unreachable: "Couldn't reach the forecast service ({reason}). Enter the week by hand instead.",
+      forecast_outsideRange: "This week falls outside the forecast range (about {past} days back to {future} ahead) — enter it by hand below.",
+      err_tooSlow: "it took too long to respond",
+      err_noResponseTwice: "it didn't respond in time, twice",
+
+      output_eyebrow: "Output",
+      output_heading: "This week's irrigation plan",
+      chart_heading: "Demand vs. applied (gross L / tree)",
+      chart_caption: "Both bars are gross figures — after system-efficiency losses, same basis as everywhere else on this page — so they're directly comparable. A day showing more applied than its own demand isn't an error: that's advance watering ahead of the rest day. The rest day's own bar shows what it would have needed, even though nothing is actually poured on it that day.",
+      chart_viewAsTable: "View as table",
+      th_day: "Day",
+      chart_th_demand: "Demand (L/tree)",
+      chart_th_applied: "Applied (L/tree)",
+      chart_th_deficit: "Deficit (L/tree)",
+      sched_summary: "Full table — liters per tree, timing, plot totals, and the comparison to last week",
+      th_weather: "Weather",
+      th_litersPerTree: "L / tree",
+      th_pumpSchedule: "Pump schedule",
+      th_totalPoured: "Total poured (L)",
+      th_vsLastWeek: "vs last week",
+      th_notes: "Notes",
+      btn_print: "Print / Save as PDF",
+      btn_excel: "Download Excel (.xlsx)",
+      btn_copy: "Copy schedule as text",
+      btn_reset: "Reset to example week",
+
+      ref_eyebrow: "Reference, optional",
+      ref_heading: "Last week's schedule (L / tree)",
+      ref_caption: "Used only to show how this week's plan differs from a schedule that already worked. Edit if last week looked different.",
+
+      formulas_eyebrow: "Progressive disclosure",
+      formulas_heading: "How this plan is calculated",
+      formulas_intro: "Every figure below is read from THIS plan, right now — not a general description that can drift out of sync with what's actually on screen above.",
+
+      footer_numbers: "<strong>How the numbers are built.</strong> Each day's water need starts from ET<sub>0</sub> (reference evapotranspiration) pulled live from Open-Meteo, which Open-Meteo itself derives from real temperature (not just a daily max — the actual curve), solar radiation (so a cloudy, overcast day pulls this down on its own, with no separate \"cloud cover\" step needed), humidity and wind. That single figure, scaled by the chosen variety's crop coefficient (Guatemalan types like Reed run higher than Mexican-race types like Bacon or Zutano) and by how well the soil at the pin holds moisture, is this plan's actual water need for the day. Only when no live pull has happened for a given day does it fall back to the hand-set baseline L/tree figure and a coarser hot/normal guess. Real rainfall for that day is converted to liters per tree using the plot's own tree spacing and subtracted in full before anything is irrigated — if rain already covers the need, that day is skipped outright rather than topped up, because under-watering is recoverable and over-watering risks root rot. Every final number is rounded down, never up, for the same reason. If the week's demand still exceeds the water budget, every irrigation day is scaled down proportionally.",
+      footer_density: "<strong>Tree density vs. plot size.</strong> A single tree's own demand is set by its canopy, not by how much empty land happens to be around it, so each tree's land/water credit is capped at roughly a closed-canopy reference (40 trees/dunam — the default). Planted sparser than that, every tree still gets that full reference share and rainfall is credited the same way, so the plot's total use scales with how many trees are actually out there, not with land you aren't using. Planted denser than that, trees genuinely compete for a shrinking footprint, so each one's share — and rainfall credit — shrinks for real, and total use levels off at the land-area ceiling rather than climbing further. Assumes roughly 80% of any given rainfall reaches the root zone.",
+      footer_coverage: "<strong>What this does and doesn't cover.</strong> Temperature through the day, cloud cover and sun exposure all feed into ET<sub>0</sub> as above, so yes — they matter, and they're already in the number. A genuine heatwave shows up automatically as a spike in ET<sub>0</sub>, not as a separate flag. What isn't modeled: windblown dust or sandstorms (no free weather API reports this directly) and any physical damage to the canopy — those still need a human to notice and override by hand.",
+      footer_restday: "<strong>Rest day.</strong> The rest day itself is never watered, but its water isn't simply lost — it only goes to a day actually shown in this week's view, on the correct side of the rest day: the day before gets an advance share (so the soil is already moist going into the dry day), the day after gets a make-up share, and either one is skipped if it isn't really in this week's displayed range — a rest day on Saturday, the default, has no \"day after\" inside a Sunday-start week, so advance watering onto Friday carries the whole job, and whatever that can't cover is disclosed as carrying into next week rather than wrongly credited to an earlier day. With the soil-water balance (below) switched on and fed by real ET&#8320;, the advance amount is sized to what the soil can actually hold and to what the rest day's own forecast still needs, not a blind half; otherwise it falls back to splitting evenly across whichever day(s) are actually in view. If the rest day would have needed nothing anyway (say it's forecast to rain), nothing is redistributed. Turning the rest day off entirely (\"None\") removes this step too, since every day is then watered on its own. Any day whose demand — including a redistributed share — would exceed the pump's actual flow &times; max hours is capped at that ceiling and flagged.",
+      footer_timing: "<strong>Timing.</strong> Each day's watering window is picked from the hourly forecast (early morning, evening, or late night — midday is never used) by whichever of those windows is driest, to cut evaporative loss. Without hourly data it falls back to a generic early-morning slot.",
+      footer_sensor: "<strong>Ground sensor.</strong> Only \"today's\" card accepts a real sensor reading — the forecast days ahead are still estimates, and nothing can be measured for a day that's already passed. A moisture reading at or above 0.30 m&sup3;/m&sup3; skips today's irrigation outright; below that it scales the need down proportionally. A measured evapotranspiration reading replaces the modeled estimate for today only.",
+      footer_dates: "<strong>Choosing dates.</strong> The calendar sets which 7-day window \"this week\" means. Greyed-out dates have no forecast (Open-Meteo's own live range is roughly 90 days back to 15 days ahead) — you can still pick them, but you'll enter that week's weather by hand.",
+      footer_sources: "<strong>Data sources.</strong> Weather, modeled soil moisture and ET0: Open-Meteo (reliable in testing). Soil type: a built-in table of named regional surveys plus global desert / Mediterranean / rainforest climate belts — this is the primary source precisely because it makes no network call and so cannot go down. ISRIC SoilGrids is offered as an optional live upgrade for extra precision, but it has proven unreliable in repeated testing (anywhere from under a second to a full timeout on the same query) and should not be relied on. Map: OpenStreetMap. If any live source can't be reached, the affected field falls back to whatever you last set by hand.",
+
+      weather_hot: "Hot", weather_normal: "Normal", weather_rainy: "Rainy",
+      note_rest: "Rest day — no irrigation.",
+      note_capped: "Capped at the pump's flow rate for the window; make up any shortfall the next irrigation day.",
+      note_rainSkip: "Rainfall ({mm}mm) already covers the day's need — skipped to avoid over-watering and root rot.",
+      note_rainCredit: "Rainfall ({mm}mm) credited against today's need — topped up only the rest, never beyond it.",
+      note_rainCreditHot: "Heat still pushes the baseline need up.",
+      note_hot: "Heat raises evapotranspiration — watered above baseline, capped at the estimated need.",
+      note_normal: "Baseline demand for a normal day.",
+
+      narr_waterDaysWithRest: "Water {days} of 7 days this week, skipping {day} (rest day).",
+      narr_waterDaysNoRest: "Water {days} of 7 days this week.",
+      narr_compBoth_storage: "{day}'s skipped water (about {amt} L/tree) isn't lost — about {beforeAmt} L/tree is advanced onto {beforeDay} (as much as the soil can actually hold before {day}), and about {afterAmt} L/tree makes up on {afterDay} whatever that still leaves short.",
+      narr_compBoth_flat: "{day}'s skipped water (about {amt} L/tree) isn't lost — half is added to {beforeDay} so the soil goes into the rest day already moist, and half to {afterDay} to make up the rest.",
+      narr_compBeforeOnly_storage: "{day}'s skipped water (about {amt} L/tree) is partly advanced onto {beforeDay} (about {beforeAmt} L/tree, as much as the soil can hold) — there's no day after {day} in this week's view to make up the rest without crediting an earlier day for it.",
+      narr_compBeforeOnly_flat: "{day}'s skipped water (about {amt} L/tree) is advanced onto {beforeDay} (about {beforeAmt} L/tree) — there's no day after {day} in this week's view to make up the rest without crediting an earlier day for it.",
+      narr_carryover: "About {amt} L/tree carries into next week instead.",
+      narr_compAfterOnly: "{day}'s skipped water (about {amt} L/tree) is made up on {afterDay} (about {afterAmt} L/tree) — there's no day before {day} in this week's view to advance-water from.",
+      narr_compNeither: "{day}'s skipped water (about {amt} L/tree) has no other day in this week's view to redistribute onto.",
+      narr_fullWeek: "The tree still gets its full week of water, just not on the rest day.",
+      narr_dependsOnLimits: "Whether that fully makes up for the rest day depends on the budget and pump limits below.",
+      narr_restNotNeeded: "{day} wasn't forecast to need water anyway, so nothing needs making up.",
+      narr_hotVsNormal: "{days} run hottest — about {hotL} L/tree, versus {normalL} L/tree on a normal day.",
+      narr_hotOnly: "{days} run hottest — about {hotL} L/tree.",
+      "narr_rainySkip_sg": "{days} gets enough rain to skip irrigation entirely — watering on top of that would risk root rot.",
+      "narr_rainySkip_pl": "{days} get enough rain to skip irrigation entirely — watering on top of that would risk root rot.",
+      "narr_rainyCut_sg": "{days} gets cut back for rain — about {rainyL} L/tree.",
+      "narr_rainyCut_pl": "{days} get cut back for rain — about {rainyL} L/tree.",
+      narr_bestWindow: "Best window on {day}: {window}, the driest stretch in the hourly forecast.",
+      narr_budgetTrim: "Raw demand outran the weekly budget, so every irrigation day was trimmed by about {pct}%.",
+      narr_pumpCapped: "Pump flow limits {n} day(s) ({days}) below the model's target — plan a top-up on the next irrigation day.",
+      narr_comfortable: "Total use is {total} L, {pct}% of the {budget} L budget — comfortably inside both the budget and the pump.",
+
+      card_today: "today",
+      card_live: "live",
+      card_rainPlaceholder: "rain mm",
+      card_rainCreditedAnyway: "+{mm}mm forecast, credited anyway",
+      sensor_toggle: "I have a real sensor reading for right now",
+      sensor_moisturePlaceholder: "soil moisture, m³/m³ (e.g. 0.20)",
+      sensor_etPlaceholder: "measured evapotranspiration, mm (e.g. 3.5)",
+      sensor_hintMoisture: "modeled moisture ~{v} m³/m³",
+      sensor_hintEt0: "modeled ET0 ~{v}mm",
+      sensor_hintForReference: "For reference ({parts}) — your real reading overrides this.",
+      sensor_hintNoData: "Pull a live forecast for a modeled reference value, or just enter your own reading.",
+
+      region_hula: "Hula Valley", region_negev: "Negev Desert", region_galilee: "Galilee / Golan hills",
+      region_medBasin: "Mediterranean basin", region_california: "California", region_chile: "Central Chile",
+      region_ausSW: "Southwest Australia", region_westernCape: "Western Cape",
+      region_amazon: "Amazon basin", region_congo: "Congo basin", region_seAsia: "Southeast Asia",
+      region_sahara: "Sahara / Arabian desert belt", region_kalahari: "Kalahari / Namib",
+      region_ausOutback: "Australian Outback", region_naSWDesert: "North American SW desert",
+      region_centralAsia: "Central Asian desert belt", region_atacama: "Atacama", region_patagonia: "Patagonia",
+      soilLabel_clayLoamHeavy: "heavy clay-loam", soilLabel_sandy: "sandy / fast-draining", soilLabel_loam: "loam",
+      soilLabel_clayLoamMed: "clay-loam (Mediterranean)", soilLabel_clayEquatorial: "clay (equatorial)",
+      soil_builtinEstimate: "Built-in estimate for {region}: {label}. Reliable (no network call) — override the dropdown if you know this plot better.",
+      soil_noRegionMatch: "No specific region matched, so defaulting to loam as a neutral estimate. Reliable (no network call) — override the dropdown if you know this plot better.",
+      soil_tryingLive1: "Trying live soil detection (ISRIC SoilGrids, attempt 1 of 2)…",
+      soil_tryingLive2: "First attempt didn't respond — trying live soil detection again (attempt 2 of 2)…",
+      soil_detected: "Detected {label} (clay {clay}%, sand {sand}%) from ISRIC SoilGrids. Override the dropdown if you know this plot better.",
+      soil_detectFailed: "Live soil detection failed ({reason}) — this third-party service is unreliable right now. Keeping the regional default ({current}). Pick a different soil type by hand, or try live detection again later.",
+
+      print_thisWeek: "this week",
+      print_planFor: "Plan for {range} — printed {printed}",
+      print_location: "Location: {lat}, {lon}",
+      print_variety: "Variety: {name}",
+      print_soil: "Soil: {label}",
+      print_trees: "Trees: {trees} ({area} dunam, {density}/dunam)",
+      print_budget: "Weekly budget: {budget} L",
+      print_pump: "Pump: {pump} L/h capacity, {emitter} L/h/tree emitters, max {maxHours} h/day, {eff}% efficient",
+      print_restday: "Rest day: {day}",
+      print_waterUsed: "Water used this week: {used} L ({pct}% of budget)",
+      pill_rest: "Rest",
+      unit_lPerTree: "L / tree",
+      pc_total: "{total} L total",
+      sum_waterUsed: "Water used",
+      unit_l: "L",
+      sum_ofBudget: "of {budget} L budget ({pct}%)",
+      sum_irrigationDays: "Irrigation days",
+      sum_isRestDay: "{day} is rest day",
+      sum_noRestDay: "no rest day set",
+      sum_pumpHeadroom: "Pump headroom",
+      unit_lPerDay: "L/day",
+      sum_hitCap: "{n} day(s) hit the cap",
+      sum_neverExceeded: "never exceeded this week",
+      warn_budgetExceeded: "Raw demand ({raw} L) exceeded the weekly budget, so every irrigation day was scaled down by {pct}%.",
+      warn_pumpLimited: "Pump flow limited irrigation on: {days}. Trees on those days received less than the model's target — plan a top-up on the following irrigation day.",
+
+      sched_noIrrigation: "No irrigation",
+      sched_skipNoWatering: "Skip — no watering needed",
+      sched_defaultSlot: "default slot",
+      sched_sensorAdjusted: "Adjusted using your sensor reading for today.",
+      sched_compBoth: "That water isn't lost — split between {beforeDay} and {afterDay}.",
+      sched_compBeforeOnly: "That water isn't lost — advanced onto {beforeDay}.",
+      sched_compCarryover: "The rest carries into next week (no day after {day} in this view).",
+      sched_compAfterOnly: "That water isn't lost — made up on {afterDay}.",
+      sched_topUpAdvance: "Includes a top-up for {day}'s rest day, watered in advance.",
+      sched_topUpMakeup: "Includes a top-up making up for {day}'s rest day.",
+      copy_header: "Day\tWeather\tL/tree\tWhen\tPlot total (L)\tvs last week\tNotes",
+      copy_copied: "Copied",
+      topUp: "top-up",
+
+      excel_title: "Avocado Irrigation Planner — Plot Summary",
+      excel_libMissing: "The Excel library didn't load (no internet access right now?). Try again, or use Print / Save as PDF instead.",
+      excel_sheetSummary: "Plot Summary",
+      excel_sheetSchedule: "Schedule",
+
+      chart_title_demand: "{day} demand: {v} L/tree",
+      chart_title_demandRest: "{day} demand: {v} L/tree (rest day — not actually irrigated)",
+      chart_title_applied: "{day} applied: {v} L/tree",
+      chart_title_deficit: "{day} deficit: {v} L/tree",
+      chart_legendDemand: "Demand", chart_legendApplied: "Applied", chart_legendRest: "Rest day (hypothetical)",
+      chart_ariaIntro: "Bar chart comparing each day's gross water demand to the gross amount actually applied:",
+      chart_ariaDay: "{day} demand {demand} liters per tree, applied {applied} liters per tree",
+      chart_restDayLabel: "rest day",
+
+      formulas_modeAssignment: "Mode: Assignment / example.",
+      formulas_modeAssignmentDetail: "Deterministic offline demonstration — weather categories and rainfall are fixed assumptions, never live data, and the live-fetch button is disabled. Numeric ET&#8320; is never used in this mode.",
+      formulas_modeField: "Mode: Field planning.",
+      formulas_modeFieldLive: "Dated week with a live forecast pulled from Open-Meteo.",
+      formulas_modeFieldManual: "Dated week with manually entered weather.",
+      formulas_modeFieldLiveNote: "Any day you've hand-edited since pulling is marked and no longer tied to that pulled ET&#8320;.",
+      formulas_modeFieldManualNote: "Switch to a live pull to use numeric ET&#8320; instead of the baseline/category estimate below.",
+      formulas_needHeading: "Per-tree water need.",
+      formulas_needEt0: "For a day with real ET&#8320; (Open-Meteo's reference evapotranspiration): <code>need = ET&#8320; &times; kc &times; soilFactor &times; canopyFactor &times; effAreaPerTree</code> — currently kc {kc} ({variety}), soilFactor {soilFactor}, canopyFactor {canopyFactor} ({coverage}% coverage, {stage}), effAreaPerTree {area} m&sup2;.",
+      formulas_needBaseline: "For a day with no live ET&#8320; (manual/assignment): <code>need = baseline &times; heatFactor(if hot) &times; soilFactor &times; waterFactor &times; canopyFactor &times; densityFactor</code> — currently baseline {baseline} L/tree, heatFactor {heatFactor} on a hot day, waterFactor {waterFactor}, densityFactor {densityFactor}.",
+      formulas_needSensor: "A real sensor reading for today (if used) replaces this whole formula outright rather than being scaled by any of the above, canopyFactor included.",
+      formulas_needTail: "Both modeled paths then subtract rainfall credit (<code>rain_mm &times; effAreaPerTree &times; {infiltration}</code> — {infiltrationPct}% of rainfall assumed to reach the root zone), floored at zero, then divide by system efficiency (<code>net &divide; efficiency</code>) for the GROSS, pump-side figure used everywhere downstream — currently &divide; {efficiencyPct}%.",
+      formulas_treeCountHeading: "Tree count &amp; reference area.",
+      formulas_treeCount: "{trees} trees = round({area} dunam &times; {density} trees/dunam). Each tree's reference area is capped at the {refDensity}/dunam closed-canopy reference ({refArea} m&sup2;), so planting sparser than that doesn't inflate any one tree's own demand. Land per tree and actual canopy/root area are being treated as the same thing here — a simplification, not a measured root-zone reading.",
+      formulas_hwHeading: "Hardware feasibility.",
+      formulas_hwFeasible: "feasible",
+      formulas_hwInfeasible: "NOT feasible (scheduled at the pump's actual rate instead, which under-delivers vs. the all-at-once ideal)",
+      formulas_hw: "All {trees} trees at once need <code>trees &times; emitterFlow</code> = {zoneFlow} L/h; the pump supplies {pump} L/h, so whole-plot operation is {feasible}. Effective flow = <code>min(zoneDemandFlow, pumpCapacity)</code> = {effFlow} L/h; daily cap = <code>effectiveFlow &times; maxHours</code> = {dailyCap} L/day. Event duration = <code>volume &divide; effectiveFlow</code>, kept to minute precision, never rounded up to a whole hour. This is a simplified capacity check (whole-plot flow vs. pump rating only), not a pressure-network/hydraulic design — no zones are modeled.",
+      formulas_budgetActive: "Budget scaling — active.",
+      formulas_budgetActiveDetail: "Raw weekly demand {raw} L exceeds the {budget} L budget, so every irrigation day is scaled by <code>budget &divide; rawWeeklyTotal</code> = {scale}% before hardware capping is applied.",
+      formulas_budgetInactive: "Budget scaling — not active.",
+      formulas_budgetInactiveDetail: "Raw weekly demand ({raw} L) is within the {budget} L budget. Hardware capping above is a separate, independent limit and can still apply even when this isn't.",
+      formulas_restActive: "Rest-day redistribution — active.",
+      formulas_restActiveStorage: "sized against the soil-water balance below",
+      formulas_restActiveFlat: "split flat (no soil-balance data to reason from)",
+      formulas_restActiveDetail: "{day}'s own need ({amt} L/tree gross) is {how}: {beforeClause}; {afterClause}{carryover}.",
+      formulas_restBeforeAdvanced: "{amt} L/tree advanced onto {day}",
+      formulas_restBeforeNone: "none advanced (no day before in this view)",
+      formulas_restAfterMade: "{amt} L/tree made up on {day}",
+      formulas_restAfterNone: "none made up (no day after in this view)",
+      formulas_restCarryover: "; {amt} L/tree unresolved, carried to next week",
+      formulas_restInactive: "Rest-day redistribution — not active.",
+      formulas_restInactiveDetail: "{day} isn't forecast to need water this week, so there's nothing to redistribute.",
+      formulas_restNA: "Rest-day redistribution — not applicable.",
+      formulas_restNADetail: "No rest day is configured; every day is watered on its own.",
+      formulas_soilActive: "Soil-water balance — active.",
+      formulas_soilActiveDetail: "<code>TAW = 1,000 &times; (FC &minus; WP) &times; root depth</code> = {taw} mm; <code>RAW = depletion fraction &times; TAW</code> = {raw} mm. Depletion is tracked in mm per tree's reference area, day to day, and currently feeds only the rest-day advance-watering decision above — it does not yet feed back into any other day's own scheduled amount.",
+      formulas_soilOff: "Soil-water balance — off.",
+      formulas_soilInvalid: "Soil-water balance — invalid, FC must exceed WP.",
+      formulas_soilInactiveDetail: "Ignored in this plan's actual schedule; rest-day redistribution above uses the flat fallback instead.",
+      formulas_ignoredHeading: "Ignored this mode.",
+      formulas_ignoredAssignment: "Live forecast fetch, map/location pull, and numeric ET&#8320; — every number above comes from the baseline/category path.",
+      formulas_ignoredSensorOff: "Today's manual sensor override is off, so it plays no part in any number above.",
+      formulas_ignoredSensorOn: "Today's manual sensor reading is active and overrides the normal calculation for today only.",
+      formulas_sources: "Sources: <a href=\"https://www.fao.org/4/x0490e/x0490e0b.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, crop evapotranspiration</a> (ET&#8320;&times;kc), <a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, soil water balance</a> (TAW/RAW), <a href=\"https://ipm.ucanr.edu/agriculture/avocado/monitor-and-manage-irrigation/\" target=\"_blank\" rel=\"noopener\">UC IPM, avocado irrigation</a>. Crop coefficients, soil-type multipliers, rot-sensitivity/heat/water factors, the {infiltrationPct}% rainfall-infiltration figure, the 40-trees/dunam reference density, and the soil-water-balance defaults are this app's own estimates built from that general guidance — not a validated reading for any specific plot. Replace them with real field/agronomist data where you have it."
+    },
+    he: {
+      eyebrow_planning: "תכנון השקיה",
+      appTitle: "מתכנן השקיה לאבוקדו",
+      appIntro: "בחרו כל נקודה על המפה. האפליקציה שולפת את סוג הקרקע באותו מיקום ואת תחזית השעות האמיתית לשבוע הקרוב, והופכת אותם לתוכנית השקיה יומית ושעתית — ליטרים לעץ, בתוך מגבלות התקציב והמשאבה שלכם, עם נטייה להשקות מעט פחות ולא לסכן בעודף מים. כל מה שנשלף אוטומטית ניתן גם לשנות ידנית.",
+      mode_eyebrow: "מצב",
+      mode_assignmentBtn: "דוגמת התרגיל",
+      mode_fieldBtn: "תכנון שטח",
+      mode_assignmentNote: "הדגמה קבועה וללא תלות ברשת: בדיוק 2 ימים חמים / יום גשום אחד / 4 ימים רגילים, מתוארכים ליום ראשון של השבוע הנוכחי. התחזית החיה מושבתת כאן בכוונה — התרגיל שממנו זה מגיע לא נועד להיות מוחלף בשקט במזג אוויר אמיתי. עברו ל\"תכנון שטח\" לשבוע אמיתי עם נתונים חיים.",
+      loc_eyebrow: "מיקום",
+      loc_heading: "איפה החלקה?",
+      loc_latLabel: "קו רוחב",
+      loc_lonLabel: "קו אורך",
+      loc_refreshBtn: "רענון נתונים למיקום הזה",
+      loc_soilLabel: "סוג קרקע",
+      loc_soilClay: "חרסית כבדה (שומרת לחות)",
+      loc_soilLoam: "לס (קרקע בינונית)",
+      loc_soilSandy: "חולית / מתנקזת מהר",
+      loc_detectSoilBtn: "נסו זיהוי חי ומדויק (לרוב אינו זמין)",
+      loc_soilStatus: "לחצו בכל מקום על המפה כדי להציב שם את הסיכה — סוג הקרקע מתמלא מיד ובאופן אמין מטבלת אקלים/אזורים מובנית (ללא קריאת רשת, כך שלא יכולה להיכשל). כפתור הזיהוי החי הוא בונוס לדיוק נוסף כשהשירות החיצוני הזה במקרה פעיל — אל תסתמכו עליו. ניתן לשנות את התפריט בכל עת.",
+
+      soilBal_eyebrow: "מתקדם, אופציונלי",
+      soilBal_heading: "מאזן מים בקרקע (TAW / RAW)",
+      soilBal_intro: "עוקב אחרי \"דלי\" מים אגור באזור השורשים יום אחר יום — נפרד ומפורט יותר ממקדם סוג הקרקע למעלה — כך שהתוכנית יכולה להציג דלדול אמיתי וסיכון למתח מים, לא רק סך ליטרים. <strong>כרגע לאבחון בלבד:</strong> זה מדווח על הסיכון שהתוכנית לשבוע הזה משאירה מאחור; זה עדיין לא משנה את התוכנית עצמה. דורש ET&#8320; חי ליום (מצב תכנון שטח + משיכת תחזית חיה) כדי לדמות אותו יום — ימים בלעדיו מוצגים כלא מדומים. ברירות המחדל למטה הן נקודות אמצע כלליות מספרי לימוד (<a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, מאזן מים בקרקע</a>), לא מדידה מאומתת עבור החלקה שלכם — החליפו אותן בנתוני בדיקת קרקע או אגרונום משלכם כשיש לכם.",
+      soilBal_enable: "הפעלת מעקב מאזן מים בקרקע",
+      soilBal_fc: "קיבולת שדה (% נפח)",
+      soilBal_wp: "נקודת קמילה (% נפח)",
+      soilBal_rootDepth: "עומק שורשים אפקטיבי (מ')",
+      soilBal_depletion: "דלדול מותר (% מ-TAW)",
+      soilBal_startMoisture: "לחות קרקע בתחילת השבוע",
+      soilBal_startUnknown: "לא ידוע — נניח בדיוק בסף המילוי מחדש (דלדול = RAW)",
+      soilBal_startFull: "נניח מלא (הושקה/ירד גשם זה עתה עד קיבולת שדה)",
+      soilBal_invalid: "קיבולת השדה ({fc}%) חייבת להיות גדולה מנקודת הקמילה ({wp}%), ועומק השורשים חייב להיות חיובי — תקנו את הנתונים למעלה כדי להפעיל את המאזן.",
+      soilBal_tawRawNote: "TAW (סך המים הזמינים): {taw} מ\"מ · RAW (הזמינים בקלות לפני סיכון מתח): {raw} מ\"מ, לאזור שורשים בעומק {depth} מ'.",
+      soilBal_notSimulated: "לא מדומה — אין עדיין ET&#8320; חי ליום הזה.",
+      soilBal_riskYes: "כן — מעבר ל-RAW",
+      soilBal_riskNo: "לא",
+      soilBal_th_start: "דלדול בתחילת היום (מ\"מ)",
+      soilBal_th_rain: "זיכוי גשם (מ\"מ)",
+      soilBal_th_irrigation: "השקיה (מ\"מ)",
+      soilBal_th_et: "התאיידות-דיות (מ\"מ)",
+      soilBal_th_drainage: "ניקוז (מ\"מ)",
+      soilBal_th_end: "דלדול בסוף היום (מ\"מ)",
+      soilBal_th_risk: "סיכון מתח",
+      soilBal_caption: "דלדול בסוף היום הוא כמה יבש דלי אזור השורשים בסגירת היום (0 = מלא, {taw} מ\"מ = ריק). סיכון מתח פירושו שהדלדול עבר את ה-RAW ({raw} מ\"מ) — זה מדווח על מה שהתוכנית למעלה כבר עושה לקרקע; זה לא משנה את התוכנית הזו.",
+
+      plot_eyebrow: "נקבע פעם בעונה",
+      plot_heading: "חלקה ומגבלות משאבה",
+      plot_area: "גודל החלקה (דונם, 1000 מ\"ר)",
+      plot_density: "צפיפות עצים (עצים / דונם)",
+      plot_treesSummary: "= {trees} עצים בחלקה, כ-{spacing} מ\"ר של אזור שורש/נוף לכל עץ",
+      plot_variety: "זן אבוקדו",
+      plot_growthStage: "שלב גידול",
+      plot_stageYoung: "צעיר (נשתל לאחרונה)",
+      plot_stageDeveloping: "מתפתח",
+      plot_stageMature: "בוגר",
+      plot_canopyCoverage: "כיסוי נוף בפועל (%)",
+      plot_canopyNote: "עץ שעדיין לא מילא את טביעת הנוף שלו שואב באופן יחסי פחות מים, בנפרד מהפניית השטח/צפיפות למעלה. בחירת שלב ממלאת כיסוי המחשה (&asymp;50% / 75% / 95%) ועומק אזור שורשים תואם למאזן המים בקרקע למטה — שניהם הערכות הניתנות לעריכה, לא מדידות בפועל, כך שניתן לשנות אותן אם מדדתם בעצמכם. התוכנית הזו מניחה אזור אחיד אחד; אם בחלקה יש גילאים מעורבים באמת, תכננו כל קבוצת גיל בנפרד (כחלקה/הפעלה משלה) וסכמו את התוצאות במקום לממצע שלב כאן.",
+      plot_baseline: "בסיס ליטר/עץ ביום מתון (הערכת ET<sub>c</sub>, לזן הזה)",
+      plot_budget: "תקציב מים שבועי (ליטר)",
+      plot_emitterFlow: "ספיקת טפטפת לעץ (ליטר/שעה)",
+      plot_pumpCapacity: "קיבולת משאבה (ליטר/שעה)",
+      plot_maxHours: "שעות השקיה מרביות ליום",
+      plot_efficiency: "יעילות המערכת (%)",
+      plot_restday: "יום מנוחה — ללא השקיה",
+      plot_restSat: "שבת",
+      plot_restNone: "ללא",
+      day_sun: "ראשון", day_mon: "שני", day_tue: "שלישי", day_wed: "רביעי", day_thu: "חמישי", day_fri: "שישי",
+
+      hw_feasible: "השקיית כל {trees} העצים בבת אחת דורשת {flow} ליטר/שעה — בתוך קיבולת המשאבה של {pump} ליטר/שעה.",
+      hw_infeasible: "השקיית כל {trees} העצים בבת אחת הייתה דורשת {flow} ליטר/שעה, אך המשאבה מספקת רק {pump} ליטר/שעה — הפעלת כל החלקה בבת אחת אינה אפשרית. התוכנית הזו מתזמנת בקצב האמיתי של המשאבה, כלומר לוקח יותר זמן (או מספקת פחות) מאשר הפעלת הכול בבת אחת; פיצול לכ-{zones} אזורים עוקבים היה סוגר את הפער, אך לא הוגדרו כאן אזורים.",
+      hw_dailyCapSummary: "= תקרה של {dailyCap} ליטר/יום, מסופקת בקצב {flow} ליטר/שעה",
+
+      forecast_eyebrow: "השבוע הזה",
+      forecast_heading: "מה התחזית?",
+      cal_legend: "לתאריכים אפורים אין עדיין תחזית (רחוק מדי קדימה או אחורה) — עדיין ניתן לבחור בהם, אך תזינו את מזג האוויר של אותו שבוע ידנית.",
+      forecast_manualBtn: "הזנה ידנית",
+      forecast_liveBtn: "משיכת תחזית חיה",
+      forecast_hotThreshold: "סף יום חם (מעלות צלזיוס מקסימום)",
+      forecast_rainThreshold: "סף יום גשום (מ\"מ)",
+      forecast_fetchBtn: "משיכת תחזית ל-7 ימים עבור המיקום הזה",
+      forecast_fetchStatus: "שולף נתונים יומיים ושעתיים מ-Open-Meteo עבור קואורדינטות הסיכה. יום נחשב גשום בסף הגשם או מעליו, אחרת חם בסף הטמפרטורה או מעליו, אחרת רגיל. ניתן לערוך כל יום למטה אחרי המשיכה.",
+      forecast_fetching: "שולף את התחזית…",
+      forecast_pulled: "נמשך {from} – {to}. ערכו כל יום למטה אם נדרש שינוי ידני.",
+      forecast_unreachable: "לא ניתן היה להגיע לשירות התחזית ({reason}). הזינו את השבוע ידנית במקום.",
+      forecast_outsideRange: "השבוע הזה נמצא מחוץ לטווח התחזית (בערך {past} ימים אחורה עד {future} ימים קדימה) — הזינו אותו ידנית למטה.",
+      err_tooSlow: "לקח יותר מדי זמן להגיב",
+      err_noResponseTwice: "לא הגיב בזמן, פעמיים",
+
+      output_eyebrow: "פלט",
+      output_heading: "תוכנית ההשקיה לשבוע הזה",
+      chart_heading: "ביקוש מול כמות שסופקה (ברוטו, ליטר/עץ)",
+      chart_caption: "שני העמודים הם ערכי ברוטו — אחרי אובדן יעילות המערכת, אותו בסיס כמו בכל מקום אחר בעמוד — כך שניתן להשוות ביניהם ישירות. יום שמראה כמות שסופקה גדולה מהביקוש שלו עצמו אינו טעות: זו השקיה מוקדמת לקראת יום המנוחה. העמודה של יום המנוחה עצמו מראה מה הוא היה צריך, גם אם בפועל לא נשפך עליו דבר באותו יום.",
+      chart_viewAsTable: "הצגה כטבלה",
+      th_day: "יום",
+      chart_th_demand: "ביקוש (ליטר/עץ)",
+      chart_th_applied: "סופק (ליטר/עץ)",
+      chart_th_deficit: "גירעון (ליטר/עץ)",
+      sched_summary: "טבלה מלאה — ליטרים לעץ, תזמון, סך לחלקה, והשוואה לשבוע שעבר",
+      th_weather: "מזג אוויר",
+      th_litersPerTree: "ליטר / עץ",
+      th_pumpSchedule: "לוח זמני משאבה",
+      th_totalPoured: "סך שנשפך (ליטר)",
+      th_vsLastWeek: "לעומת שבוע שעבר",
+      th_notes: "הערות",
+      btn_print: "הדפסה / שמירה כ-PDF",
+      btn_excel: "הורדת קובץ Excel ‎(.xlsx)",
+      btn_copy: "העתקת התוכנית כטקסט",
+      btn_reset: "איפוס לשבוע לדוגמה",
+
+      ref_eyebrow: "עזר, אופציונלי",
+      ref_heading: "התוכנית של שבוע שעבר (ליטר / עץ)",
+      ref_caption: "משמש רק כדי להראות כיצד התוכנית לשבוע הזה שונה מתוכנית שכבר הצליחה. ערכו אם שבוע שעבר היה שונה.",
+
+      formulas_eyebrow: "חשיפה הדרגתית",
+      formulas_heading: "איך התוכנית הזו מחושבת",
+      formulas_intro: "כל מספר למטה נקרא מהתוכנית הזו, ממש עכשיו — לא תיאור כללי שעלול להתרחק ממה שבאמת מוצג למעלה.",
+
+      footer_numbers: "<strong>איך המספרים נבנים.</strong> הצורך היומי במים מתחיל מ-ET<sub>0</sub> (התאיידות-דיות ייחוס) הנמשך בשידור חי מ-Open-Meteo, אשר עצמו נגזר מטמפרטורה אמיתית (לא רק מקסימום יומי — העקומה בפועל), קרינת שמש (כך שיום מעונן מוריד זאת מעצמו, ללא צורך בשלב נפרד של \"כיסוי עננים\"), לחות ורוח. אותו מספר בודד, מוכפל במקדם הגידול של הזן הנבחר (זנים גואטמלים כמו ריד גבוהים יותר מזנים ממוצא מקסיקני כמו בייקון או זוטנו) ובאיכות שימור הלחות של הקרקע בנקודה, הוא הצורך האמיתי במים לאותו יום בתוכנית הזו. רק כאשר לא בוצעה משיכה חיה ליום מסוים, המערכת חוזרת לערך הבסיס שנקבע ידנית בליטר/עץ ולהערכה גסה יותר של חם/רגיל. גשם אמיתי לאותו יום מומר לליטרים לעץ לפי מרווחי הנטיעה של החלקה ומנוכה במלואו לפני כל השקיה — אם הגשם כבר מכסה את הצורך, היום מדולג לחלוטין במקום להשלים עד הסוף, כי תת-השקיה ניתנת לתיקון ועודף השקיה מסכן בריקבון שורשים. כל מספר סופי מעוגל כלפי מטה, לעולם לא כלפי מעלה, מאותה סיבה. אם הביקוש השבועי עדיין עולה על תקציב המים, כל יום השקיה מוקטן באופן יחסי.",
+      footer_density: "<strong>צפיפות עצים מול גודל החלקה.</strong> הביקוש של עץ בודד נקבע לפי הנוף שלו, לא לפי כמה אדמה ריקה יש סביבו, כך שזיכוי הקרקע/מים של כל עץ מוגבל לכ-40 עצים/דונם (ברירת המחדל) — התייחסות לנוף סגור. בנטיעה דלילה יותר מזה, כל עץ עדיין מקבל את מלוא חלקו ביחס הזה, וגם זיכוי הגשם נספר באותו אופן, כך שסך השימוש בחלקה משתנה לפי מספר העצים בפועל, לא לפי אדמה שאינה בשימוש. בנטיעה צפופה יותר מזה, העצים באמת מתחרים על שטח מצטמצם, כך שהחלק של כל אחד — וזיכוי הגשם שלו — מצטמצם בפועל, וסך השימוש מתייצב בתקרת שטח הקרקע במקום להמשיך ולעלות. מניח שכ-80% מכל גשם שיורד מגיע בפועל לאזור השורשים.",
+      footer_coverage: "<strong>מה זה מכסה ומה לא.</strong> טמפרטורה לאורך היום, כיסוי עננים וחשיפה לשמש כולם מוזנים ל-ET<sub>0</sub> כאמור לעיל, אז כן — הם משנים, וכבר נמצאים במספר. גל חום אמיתי מופיע אוטומטית כזינוק ב-ET<sub>0</sub>, לא כדגל נפרד. מה שלא מתוארך: אבק נישא ברוח או סופות חול (אין שירות תחזית חינמי שמדווח על כך ישירות) ונזק פיזי לנוף — אלה עדיין דורשים שאדם ישים לב ויעקוף ידנית.",
+      footer_restday: "<strong>יום מנוחה.</strong> יום המנוחה עצמו לעולם לא מושקה, אך המים שלו אינם פשוט אבודים — הם הולכים רק ליום שבאמת מוצג בתצוגת השבוע הזו, בצד הנכון של יום המנוחה: היום שלפני מקבל נתח מוקדם (כך שהקרקע כבר לחה לקראת היום היבש), היום שאחרי מקבל נתח השלמה, וכל אחד מהם מדולג אם הוא לא באמת בטווח המוצג של השבוע הזה — יום מנוחה בשבת, ברירת המחדל, אין לו \"יום אחרי\" בתוך שבוע שמתחיל ביום ראשון, כך שהשקיה מוקדמת ביום שישי נושאת את כל המשימה, ומה שהיא לא מצליחה לכסות מדווח כמעבר לשבוע הבא במקום להיזקף בטעות ליום מוקדם יותר. כאשר מאזן המים בקרקע (למטה) מופעל וניזון מ-ET&#8320; אמיתי, כמות ההשקיה המוקדמת נקבעת לפי מה שהקרקע יכולה להחזיק בפועל ולפי מה שיום המנוחה עצמו עדיין צריך לפי התחזית, לא חצי עיוור; אחרת היא חוזרת לחלוקה שווה בין היום/ימים שבאמת מוצגים. אם יום המנוחה לא היה צריך מים בכלל (למשל אם יורד גשם), דבר לא מחולק מחדש. כיבוי יום המנוחה לגמרי (\"ללא\") מבטל גם את השלב הזה, כי כל יום מושקה בפני עצמו. כל יום שהביקוש שלו — כולל נתח מחולק מחדש — היה עולה על הספיקה בפועל של המשאבה כפול שעות מרביות, מוגבל לתקרה הזו ומסומן.",
+      footer_timing: "<strong>תזמון.</strong> חלון ההשקיה של כל יום נבחר מהתחזית השעתית (בוקר מוקדם, ערב, או לילה מאוחר — צהריים לעולם לא בשימוש) לפי איזה מהחלונות האלה יבש ביותר, כדי לצמצם איבוד מהתאדות. ללא נתונים שעתיים, המערכת חוזרת לחלון בוקר מוקדם גנרי.",
+      footer_sensor: "<strong>חיישן קרקע.</strong> רק הכרטיס של \"היום\" מקבל קריאת חיישן אמיתית — ימי התחזית הקדימה הם עדיין הערכות, ולא ניתן למדוד יום שכבר עבר. קריאת לחות בגובה 0.30 מ\"ק/מ\"ק ומעלה מדלגת על ההשקיה של היום לגמרי; מתחת לכך היא מקטינה את הצורך באופן יחסי. קריאת התאיידות-דיות נמדדת מחליפה את ההערכה המדומה עבור היום בלבד.",
+      footer_dates: "<strong>בחירת תאריכים.</strong> הלוח שנה קובע לאיזה חלון של 7 ימים הכוונה ב\"שבוע הזה\". לתאריכים אפורים אין תחזית (הטווח החי של Open-Meteo הוא בערך 90 יום אחורה עד 15 יום קדימה) — עדיין ניתן לבחור בהם, אך תזינו את מזג האוויר של אותו שבוע ידנית.",
+      footer_sources: "<strong>מקורות נתונים.</strong> מזג אוויר, לחות קרקע מדומה ו-ET0: Open-Meteo (אמין בבדיקות). סוג קרקע: טבלה מובנית של סקרים אזוריים בשם מפורש בתוספת חגורות אקלים גלובליות של מדבר / ים תיכוני / יער גשם — זהו המקור הראשי בדיוק מפני שהוא לא מבצע קריאת רשת ולכן לא יכול ליפול. ISRIC SoilGrids מוצע כשדרוג חי אופציונלי לדיוק נוסף, אך הוכח כלא אמין בבדיקות חוזרות (בין פחות משנייה לבין פסק זמן מלא באותה שאילתה) ואין להסתמך עליו. מפה: OpenStreetMap. אם לא ניתן להגיע למקור חי כלשהו, השדה המושפע חוזר למה שהוזן ידנית לאחרונה.",
+
+      weather_hot: "חם", weather_normal: "רגיל", weather_rainy: "גשום",
+      note_rest: "יום מנוחה — ללא השקיה.",
+      note_capped: "מוגבל לקצב הזרימה של המשאבה עבור החלון; השלימו כל גירעון ביום ההשקיה הבא.",
+      note_rainSkip: "הגשם ({mm} מ\"מ) כבר מכסה את צורך היום — דולג כדי למנוע עודף השקיה וריקבון שורשים.",
+      note_rainCredit: "הגשם ({mm} מ\"מ) זוכה כנגד הצורך של היום — הושלם רק השארית, לעולם לא מעבר לכך.",
+      note_rainCreditHot: "החום עדיין דוחף את הצורך הבסיסי כלפי מעלה.",
+      note_hot: "החום מעלה את ההתאיידות-דיות — הושקה מעל הבסיס, מוגבלת לצורך המוערך.",
+      note_normal: "ביקוש בסיס ליום רגיל.",
+
+      narr_waterDaysWithRest: "השקיה ב-{days} מתוך 7 ימים השבוע, תוך דילוג על {day} (יום מנוחה).",
+      narr_waterDaysNoRest: "השקיה ב-{days} מתוך 7 ימים השבוע.",
+      narr_compBoth_storage: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) לא אבודים — כ-{beforeAmt} ליטר/עץ מוקדמים ל-{beforeDay} (ככל שהקרקע יכולה להחזיק בפועל לפני {day}), וכ-{afterAmt} ליטר/עץ משלימים ב-{afterDay} את מה שעוד נשאר חסר.",
+      narr_compBoth_flat: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) לא אבודים — חצי נוסף ל-{beforeDay} כדי שהקרקע תהיה לחה לקראת יום המנוחה, וחצי ל-{afterDay} כדי להשלים את השאר.",
+      narr_compBeforeOnly_storage: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) מוקדמים בחלקם ל-{beforeDay} (כ-{beforeAmt} ליטר/עץ, ככל שהקרקע יכולה להחזיק) — אין יום אחרי {day} בתצוגת השבוע הזו כדי להשלים את השאר מבלי לזקוף זאת ליום מוקדם יותר.",
+      narr_compBeforeOnly_flat: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) מוקדמים ל-{beforeDay} (כ-{beforeAmt} ליטר/עץ) — אין יום אחרי {day} בתצוגת השבוע הזו כדי להשלים את השאר מבלי לזקוף זאת ליום מוקדם יותר.",
+      narr_carryover: "כ-{amt} ליטר/עץ עוברים לשבוע הבא במקום זאת.",
+      narr_compAfterOnly: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) מושלמים ב-{afterDay} (כ-{afterAmt} ליטר/עץ) — אין יום לפני {day} בתצוגת השבוע הזו להקדים ממנו השקיה.",
+      narr_compNeither: "למים שדולגו של {day} (כ-{amt} ליטר/עץ) אין יום אחר בתצוגת השבוע הזו לחלק אליו.",
+      narr_fullWeek: "העץ עדיין מקבל את מלוא כמות המים השבועית שלו, רק לא ביום המנוחה.",
+      narr_dependsOnLimits: "האם זה משלים באמת את יום המנוחה תלוי במגבלות התקציב והמשאבה למטה.",
+      narr_restNotNeeded: "{day} לא היה צפוי לצורך במים ממילא, כך שאין מה להשלים.",
+      narr_hotVsNormal: "{days} החמים ביותר — כ-{hotL} ליטר/עץ, לעומת {normalL} ליטר/עץ ביום רגיל.",
+      narr_hotOnly: "{days} החמים ביותר — כ-{hotL} ליטר/עץ.",
+      "narr_rainySkip_sg": "{days} מקבל מספיק גשם כדי לדלג על ההשקיה לגמרי — השקיה נוספת על כך הייתה מסכנת בריקבון שורשים.",
+      "narr_rainySkip_pl": "{days} מקבלים מספיק גשם כדי לדלג על ההשקיה לגמרי — השקיה נוספת על כך הייתה מסכנת בריקבון שורשים.",
+      "narr_rainyCut_sg": "{days} מוקטן בגלל גשם — כ-{rainyL} ליטר/עץ.",
+      "narr_rainyCut_pl": "{days} מוקטנים בגלל גשם — כ-{rainyL} ליטר/עץ.",
+      narr_bestWindow: "החלון הטוב ביותר ב-{day}: {window}, הקטע היבש ביותר בתחזית השעתית.",
+      narr_budgetTrim: "הביקוש הגולמי חרג מהתקציב השבועי, כך שכל יום השקיה קוצץ בכ-{pct}%.",
+      narr_pumpCapped: "זרימת המשאבה מגבילה {n} יום/ימים ({days}) מתחת ליעד המודל — תכננו השלמה ביום ההשקיה הבא.",
+      narr_comfortable: "סך השימוש הוא {total} ליטר, {pct}% מתקציב {budget} הליטר — בנוחות בתוך גם התקציב וגם המשאבה.",
+
+      card_today: "היום",
+      card_live: "חי",
+      card_rainPlaceholder: "גשם מ\"מ",
+      card_rainCreditedAnyway: "‎+{mm} מ\"מ בתחזית, מזוכה בכל זאת",
+      sensor_toggle: "יש לי קריאת חיישן אמיתית כרגע",
+      sensor_moisturePlaceholder: "לחות קרקע, מ\"ק/מ\"ק (למשל 0.20)",
+      sensor_etPlaceholder: "התאיידות-דיות נמדדת, מ\"מ (למשל 3.5)",
+      sensor_hintMoisture: "לחות מדומה ‎~{v} מ\"ק/מ\"ק",
+      sensor_hintEt0: "ET0 מדומה ‎~{v} מ\"מ",
+      sensor_hintForReference: "לעיון ({parts}) — הקריאה האמיתית שלכם גוברת על כך.",
+      sensor_hintNoData: "משכו תחזית חיה לערך ייחוס מדומה, או פשוט הזינו קריאה משלכם.",
+
+      region_hula: "עמק החולה", region_negev: "מדבר הנגב", region_galilee: "הגליל / רמת הגולן",
+      region_medBasin: "אגן הים התיכון", region_california: "קליפורניה", region_chile: "מרכז צ'ילה",
+      region_ausSW: "דרום-מערב אוסטרליה", region_westernCape: "הכף המערבי",
+      region_amazon: "אגן האמזונס", region_congo: "אגן הקונגו", region_seAsia: "דרום-מזרח אסיה",
+      region_sahara: "חגורת המדבר הסהרה-ערבית", region_kalahari: "קלהרי / נאמיב",
+      region_ausOutback: "האאוטבק האוסטרלי", region_naSWDesert: "מדבר דרום-מערב צפון אמריקה",
+      region_centralAsia: "חגורת המדבר של מרכז אסיה", region_atacama: "אטקמה", region_patagonia: "פטגוניה",
+      soilLabel_clayLoamHeavy: "חרסית כבדה", soilLabel_sandy: "חולית / מתנקזת מהר", soilLabel_loam: "לס (קרקע בינונית)",
+      soilLabel_clayLoamMed: "חרסית-לס (ים תיכוני)", soilLabel_clayEquatorial: "חרסית (אקוטוריאלי)",
+      soil_builtinEstimate: "הערכה מובנית עבור {region}: {label}. אמינה (ללא קריאת רשת) — שנו את התפריט אם אתם מכירים את החלקה טוב יותר.",
+      soil_noRegionMatch: "לא נמצא אזור מתאים, כך שברירת המחדל היא לס כהערכה ניטרלית. אמינה (ללא קריאת רשת) — שנו את התפריט אם אתם מכירים את החלקה טוב יותר.",
+      soil_tryingLive1: "מנסה זיהוי קרקע חי (ISRIC SoilGrids, ניסיון 1 מתוך 2)…",
+      soil_tryingLive2: "הניסיון הראשון לא הגיב — מנסה שוב זיהוי קרקע חי (ניסיון 2 מתוך 2)…",
+      soil_detected: "זוהה {label} (חרסית {clay}%, חול {sand}%) מ-ISRIC SoilGrids. שנו את התפריט אם אתם מכירים את החלקה טוב יותר.",
+      soil_detectFailed: "זיהוי הקרקע החי נכשל ({reason}) — השירות החיצוני הזה אינו אמין כרגע. נשמרת ברירת המחדל האזורית ({current}). בחרו סוג קרקע אחר ידנית, או נסו זיהוי חי שוב מאוחר יותר.",
+
+      print_thisWeek: "השבוע הזה",
+      print_planFor: "תוכנית ל-{range} — הודפס {printed}",
+      print_location: "מיקום: {lat}, {lon}",
+      print_variety: "זן: {name}",
+      print_soil: "קרקע: {label}",
+      print_trees: "עצים: {trees} ({area} דונם, {density}/דונם)",
+      print_budget: "תקציב שבועי: {budget} ליטר",
+      print_pump: "משאבה: קיבולת {pump} ליטר/שעה, טפטפות {emitter} ליטר/שעה/עץ, מקסימום {maxHours} שעות/יום, {eff}% יעילות",
+      print_restday: "יום מנוחה: {day}",
+      print_waterUsed: "מים בשימוש השבוע: {used} ליטר ({pct}% מהתקציב)",
+      pill_rest: "מנוחה",
+      unit_lPerTree: "ליטר / עץ",
+      pc_total: "סך {total} ליטר",
+      sum_waterUsed: "מים בשימוש",
+      unit_l: "ליטר",
+      sum_ofBudget: "מתוך תקציב {budget} ליטר ({pct}%)",
+      sum_irrigationDays: "ימי השקיה",
+      sum_isRestDay: "{day} הוא יום מנוחה",
+      sum_noRestDay: "לא נקבע יום מנוחה",
+      sum_pumpHeadroom: "מרווח משאבה",
+      unit_lPerDay: "ליטר/יום",
+      sum_hitCap: "{n} יום/ימים הגיעו לתקרה",
+      sum_neverExceeded: "לא נחצה השבוע",
+      warn_budgetExceeded: "הביקוש הגולמי ({raw} ליטר) חרג מהתקציב השבועי, כך שכל יום השקיה הוקטן ב-{pct}%.",
+      warn_pumpLimited: "זרימת המשאבה הגבילה השקיה ב: {days}. העצים בימים אלה קיבלו פחות מיעד המודל — תכננו השלמה ביום ההשקיה הבא.",
+
+      sched_noIrrigation: "ללא השקיה",
+      sched_skipNoWatering: "דילוג — לא נדרשת השקיה",
+      sched_defaultSlot: "חלון ברירת מחדל",
+      sched_sensorAdjusted: "הותאם לפי קריאת החיישן שלכם להיום.",
+      sched_compBoth: "המים האלה לא אבודים — מחולקים בין {beforeDay} ל-{afterDay}.",
+      sched_compBeforeOnly: "המים האלה לא אבודים — מוקדמים ל-{beforeDay}.",
+      sched_compCarryover: "השאר עובר לשבוע הבא (אין יום אחרי {day} בתצוגה הזו).",
+      sched_compAfterOnly: "המים האלה לא אבודים — מושלמים ב-{afterDay}.",
+      sched_topUpAdvance: "כולל השלמה מוקדמת ליום המנוחה של {day}.",
+      sched_topUpMakeup: "כולל השלמה עבור יום המנוחה של {day}.",
+      copy_header: "יום\tמזג אוויר\tליטר/עץ\tמתי\tסך לחלקה (ליטר)\tלעומת שבוע שעבר\tהערות",
+      copy_copied: "הועתק",
+      topUp: "השלמה",
+
+      excel_title: "מתכנן השקיה לאבוקדו — סיכום חלקה",
+      excel_libMissing: "ספריית ה-Excel לא נטענה (אין גישה לאינטרנט כרגע?). נסו שוב, או השתמשו בהדפסה / שמירה כ-PDF במקום.",
+      excel_sheetSummary: "סיכום חלקה",
+      excel_sheetSchedule: "לוח זמנים",
+
+      chart_title_demand: "{day} ביקוש: {v} ליטר/עץ",
+      chart_title_demandRest: "{day} ביקוש: {v} ליטר/עץ (יום מנוחה — לא הושקה בפועל)",
+      chart_title_applied: "{day} סופק: {v} ליטר/עץ",
+      chart_title_deficit: "{day} גירעון: {v} ליטר/עץ",
+      chart_legendDemand: "ביקוש", chart_legendApplied: "סופק", chart_legendRest: "יום מנוחה (היפותטי)",
+      chart_ariaIntro: "תרשים עמודות המשווה את הביקוש הגולמי למים בכל יום לכמות שסופקה בפועל:",
+      chart_ariaDay: "{day} ביקוש {demand} ליטר לעץ, סופקו {applied} ליטר לעץ",
+      chart_restDayLabel: "יום מנוחה",
+
+      formulas_modeAssignment: "מצב: דוגמת התרגיל.",
+      formulas_modeAssignmentDetail: "הדגמה קבועה וללא תלות ברשת — קטגוריות מזג האוויר והגשם הן הנחות קבועות, לעולם לא נתונים חיים, וכפתור המשיכה החיה מושבת. ET&#8320; מספרי לעולם לא נמצא בשימוש במצב הזה.",
+      formulas_modeField: "מצב: תכנון שטח.",
+      formulas_modeFieldLive: "שבוע מתוארך עם תחזית חיה שנמשכה מ-Open-Meteo.",
+      formulas_modeFieldManual: "שבוע מתוארך עם מזג אוויר שהוזן ידנית.",
+      formulas_modeFieldLiveNote: "כל יום שערכתם ידנית מאז המשיכה מסומן ואינו קשור עוד ל-ET&#8320; שנמשך.",
+      formulas_modeFieldManualNote: "עברו למשיכה חיה כדי להשתמש ב-ET&#8320; מספרי במקום בהערכת הבסיס/קטגוריה למטה.",
+      formulas_needHeading: "צורך מים לעץ.",
+      formulas_needEt0: "ליום עם ET&#8320; אמיתי (התאיידות-דיות ייחוס של Open-Meteo): <code>צורך = ET&#8320; &times; kc &times; מקדם-קרקע &times; מקדם-נוף &times; שטח-אפקטיבי-לעץ</code> — כרגע kc {kc} ({variety}), מקדם-קרקע {soilFactor}, מקדם-נוף {canopyFactor} (כיסוי {coverage}%, {stage}), שטח-אפקטיבי-לעץ {area} מ\"ר.",
+      formulas_needBaseline: "ליום ללא ET&#8320; חי (ידני/תרגיל): <code>צורך = בסיס &times; מקדם-חום(אם חם) &times; מקדם-קרקע &times; מקדם-מים &times; מקדם-נוף &times; מקדם-צפיפות</code> — כרגע בסיס {baseline} ליטר/עץ, מקדם-חום {heatFactor} ביום חם, מקדם-מים {waterFactor}, מקדם-צפיפות {densityFactor}.",
+      formulas_needSensor: "קריאת חיישן אמיתית להיום (אם בשימוש) מחליפה את כל הנוסחה הזו לגמרי במקום להיות מוכפלת בכל אחד מהגורמים לעיל, כולל מקדם-הנוף.",
+      formulas_needTail: "שני המסלולים המדומים מנכים לאחר מכן זיכוי גשם (<code>גשם-מ\"מ &times; שטח-אפקטיבי-לעץ &times; {infiltration}</code> — {infiltrationPct}% מהגשם מניחים שמגיע לאזור השורשים), מוגבל לאפס, ואז מחולק ביעילות המערכת (<code>נטו &divide; יעילות</code>) לקבלת מספר הברוטו, בצד-המשאבה, שבו משתמשים בהמשך בכל מקום — כרגע &divide; {efficiencyPct}%.",
+      formulas_treeCountHeading: "מספר עצים ושטח ייחוס.",
+      formulas_treeCount: "{trees} עצים = עיגול({area} דונם &times; {density} עצים/דונם). שטח הייחוס של כל עץ מוגבל להתייחסות נוף-סגור של {refDensity}/דונם ({refArea} מ\"ר), כך שנטיעה דלילה יותר מכך לא מנפחת את הביקוש של אף עץ בודד. שטח לעץ ושטח נוף/שורש בפועל מטופלים כאן כאותו הדבר — פישוט, לא מדידה בפועל של אזור השורשים.",
+      formulas_hwHeading: "היתכנות חומרה.",
+      formulas_hwFeasible: "אפשרית",
+      formulas_hwInfeasible: "אינה אפשרית (מתוזמנת בקצב האמיתי של המשאבה במקום זאת, שמספק פחות מהאידיאל של הפעלת הכול בבת אחת)",
+      formulas_hw: "כל {trees} העצים בבת אחת דורשים <code>עצים &times; ספיקת-טפטפת</code> = {zoneFlow} ליטר/שעה; המשאבה מספקת {pump} ליטר/שעה, כך שהפעלת כל החלקה בבת אחת {feasible}. ספיקה אפקטיבית = <code>min(ביקוש-אזור, קיבולת-משאבה)</code> = {effFlow} ליטר/שעה; תקרה יומית = <code>ספיקה-אפקטיבית &times; שעות-מקסימום</code> = {dailyCap} ליטר/יום. משך האירוע = <code>נפח &divide; ספיקה-אפקטיבית</code>, בדיוק של דקות, לעולם לא מעוגל כלפי מעלה לשעה שלמה. זוהי בדיקת קיבולת מפושטת (זרימת כל החלקה מול דירוג המשאבה בלבד), לא תכנון רשת-לחץ הידראולית — לא מדומים כאן אזורים.",
+      formulas_budgetActive: "קיצוץ תקציב — פעיל.",
+      formulas_budgetActiveDetail: "הביקוש השבועי הגולמי {raw} ליטר חורג מתקציב {budget} הליטר, כך שכל יום השקיה מוקטן ב-<code>תקציב &divide; סך-גולמי-שבועי</code> = {scale}% לפני הגבלת החומרה.",
+      formulas_budgetInactive: "קיצוץ תקציב — לא פעיל.",
+      formulas_budgetInactiveDetail: "הביקוש השבועי הגולמי ({raw} ליטר) נמצא בתוך תקציב {budget} הליטר. הגבלת החומרה למעלה היא מגבלה נפרדה ועצמאית ועדיין יכולה לחול גם כשזו לא חלה.",
+      formulas_restActive: "חלוקת יום מנוחה — פעילה.",
+      formulas_restActiveStorage: "נקבעת לפי מאזן המים בקרקע למטה",
+      formulas_restActiveFlat: "מחולקת שווה בשווה (אין נתוני מאזן קרקע לנתח)",
+      formulas_restActiveDetail: "הצורך העצמי של {day} ({amt} ליטר/עץ ברוטו) {how}: {beforeClause}; {afterClause}{carryover}.",
+      formulas_restBeforeAdvanced: "{amt} ליטר/עץ מוקדמים ל-{day}",
+      formulas_restBeforeNone: "לא הוקדם דבר (אין יום לפני בתצוגה הזו)",
+      formulas_restAfterMade: "{amt} ליטר/עץ הושלמו ב-{day}",
+      formulas_restAfterNone: "לא הושלם דבר (אין יום אחרי בתצוגה הזו)",
+      formulas_restCarryover: "; {amt} ליטר/עץ לא פתור, עבר לשבוע הבא",
+      formulas_restInactive: "חלוקת יום מנוחה — לא פעילה.",
+      formulas_restInactiveDetail: "{day} לא צפוי לצורך במים השבוע, כך שאין מה לחלק.",
+      formulas_restNA: "חלוקת יום מנוחה — לא רלוונטי.",
+      formulas_restNADetail: "לא הוגדר יום מנוחה; כל יום מושקה בפני עצמו.",
+      formulas_soilActive: "מאזן מים בקרקע — פעיל.",
+      formulas_soilActiveDetail: "<code>TAW = 1,000 &times; (FC &minus; WP) &times; עומק שורשים</code> = {taw} מ\"מ; <code>RAW = שבר-דלדול &times; TAW</code> = {raw} מ\"מ. הדלדול נעקב במ\"מ לשטח הייחוס של כל עץ, יום אחר יום, וכרגע מזין רק את החלטת ההשקיה המוקדמת ליום המנוחה למעלה — הוא עדיין לא מוזן חזרה לכמות המתוזמנת של אף יום אחר.",
+      formulas_soilOff: "מאזן מים בקרקע — כבוי.",
+      formulas_soilInvalid: "מאזן מים בקרקע — לא תקין, FC חייב לעלות על WP.",
+      formulas_soilInactiveDetail: "מתעלם ממנו בתוכנית בפועל; חלוקת יום המנוחה למעלה משתמשת בחלוקה השווה במקום זאת.",
+      formulas_ignoredHeading: "מתעלמים ממנו במצב הזה.",
+      formulas_ignoredAssignment: "משיכת תחזית חיה, משיכת מפה/מיקום, ו-ET&#8320; מספרי — כל מספר למעלה מגיע ממסלול הבסיס/קטגוריה.",
+      formulas_ignoredSensorOff: "העקיפה הידנית של החיישן להיום כבויה, כך שהיא לא משפיעה על אף מספר למעלה.",
+      formulas_ignoredSensorOn: "קריאת החיישן הידנית להיום פעילה ועוקפת את החישוב הרגיל להיום בלבד.",
+      formulas_sources: "מקורות: <a href=\"https://www.fao.org/4/x0490e/x0490e0b.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, התאיידות-דיות של גידולים</a> (ET&#8320;&times;kc), <a href=\"https://www.fao.org/4/x0490e/x0490e0e.htm\" target=\"_blank\" rel=\"noopener\">FAO-56, מאזן מים בקרקע</a> (TAW/RAW), <a href=\"https://ipm.ucanr.edu/agriculture/avocado/monitor-and-manage-irrigation/\" target=\"_blank\" rel=\"noopener\">UC IPM, השקיית אבוקדו</a>. מקדמי הגידול, מקדמי סוג הקרקע, גורמי רגישות-לריקבון/חום/מים, נתון חלחול הגשם של {infiltrationPct}%, צפיפות הייחוס של 40 עצים/דונם, וברירות המחדל של מאזן המים בקרקע הם הערכות של האפליקציה הזו עצמה שנבנו מההנחיה הכללית הזו — לא מדידה מאומתת עבור חלקה ספציפית כלשהי. החליפו אותן בנתוני שדה/אגרונום אמיתיים כשיש לכם."
+    }
+  };
+  var DAYS_EN = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var DAYS_HE = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+  var DAYS_SHORT_EN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  // Standard Israeli weekday-letter abbreviations (Sunday = day 1 = Alef, etc.), the conventional
+  // short form — not a literal 3-letter slice of the full name, which is why this is a separate
+  // array rather than reusing DAYS_HE.slice(0,3) at each call site.
+  var DAYS_SHORT_HE = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  var DAYS = DAYS_EN.slice();
+  var DAYS_SHORT = DAYS_SHORT_EN.slice();
+  function applyDayNames(){
+    var src = (LANG === "he") ? DAYS_HE : DAYS_EN;
+    var srcShort = (LANG === "he") ? DAYS_SHORT_HE : DAYS_SHORT_EN;
+    for(var i = 0; i < 7; i++){
+      DAYS[i] = src[i];
+      DAYS_SHORT[i] = srcShort[i];
+      var wd = document.getElementById("calWd" + i);
+      if(wd) wd.textContent = srcShort[i];
+    }
+  }
+  // Joins a list of day names for prose. Hebrew attaches its conjunction directly to the last
+  // word (no separate "and"-equivalent word, e.g. "ראשון ושישי" not "ראשון ו Friday"); English
+  // keeps the usual "A, B and C" pattern. Both only really need to handle 1-2 items in practice
+  // (exactly 2 hot days / 1 rainy day in the assignment example), but this scales to more.
+  function joinList(arr){
+    if(arr.length === 0) return "";
+    if(arr.length === 1) return arr[0];
+    var head = arr.slice(0, -1), last = arr[arr.length - 1];
+    return LANG === "he" ? (head.join(", ") + " ו" + last) : (head.join(", ") + " and " + last);
+  }
   // The original assignment's forecast, Sunday-first: exactly 2 hot, 1 rainy, 4 normal days.
   var DEFAULT_WEATHER = ["hot","normal","normal","rainy","normal","hot","normal"];
   var DEFAULT_RAINFALL = [0,0,0,12,0,0,0];
