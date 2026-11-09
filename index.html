@@ -1105,6 +1105,7 @@
       narr_carryover: "About {amt} L/tree carries into next week instead.",
       narr_compAfterOnly: "{day}'s skipped water (about {amt} L/tree) is made up on {afterDay} (about {afterAmt} L/tree) — there's no day before {day} in this week's view to advance-water from. This is an unverified flat estimate, not confirmed against actual soil moisture — turn on soil-water balance tracking above for a measured figure.",
       narr_compNeither: "{day}'s skipped water (about {amt} L/tree) has no other day in this week's view to redistribute onto.",
+      narr_compNoHeadroom: "{day}'s skipped water (about {amt} L/tree) could not actually be redistributed this week — budget, pump or hours constraints left no real headroom on the neighboring day(s) to apply it to.",
       narr_fullWeek: "The tree still gets its full week of water, just not on the rest day.",
       narr_dependsOnLimits: "Whether that fully makes up for the rest day depends on the budget and pump limits below.",
       narr_restNotNeeded: "{day} wasn't forecast to need water anyway, so nothing needs making up.",
@@ -1416,6 +1417,7 @@
       narr_carryover: "כ-{amt} ליטר/עץ עוברים לשבוע הבא במקום זאת.",
       narr_compAfterOnly: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) מושלמים ב-{afterDay} (כ-{afterAmt} ליטר/עץ) — אין יום לפני {day} בתצוגת השבוע הזו להקדים ממנו השקיה. זו הערכה שטוחה לא מאומתת, שלא אושרה לפי לחות קרקע בפועל — הפעילו מעקב מאזן מים בקרקע למעלה לקבלת נתון מדוד.",
       narr_compNeither: "למים שדולגו של {day} (כ-{amt} ליטר/עץ) אין יום אחר בתצוגת השבוע הזו לחלק אליו.",
+      narr_compNoHeadroom: "המים שדולגו של {day} (כ-{amt} ליטר/עץ) לא הצליחו בפועל לעבור לימים אחרים השבוע — מגבלות תקציב, משאבה או שעות לא הותירו מרחב פנוי ביום/בימים השכנים כדי להחיל אותם.",
       narr_fullWeek: "העץ עדיין מקבל את מלוא כמות המים השבועית שלו, רק לא ביום המנוחה.",
       narr_dependsOnLimits: "האם זה משלים באמת את יום המנוחה תלוי במגבלות התקציב והמשאבה למטה.",
       narr_restNotNeeded: "{day} לא היה צפוי לצורך במים ממילא, כך שאין מה להשלים.",
@@ -2963,7 +2965,7 @@
     return t("note_normal");
   }
 
-  function buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity){
+  function buildNarrative(litersPerTree, ownNeed, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity){
     // Blocked overrides everything else below — a hard hardware mismatch with no confirmed,
     // feasible zone setup means there's no real schedule to narrate at all (audit P0.3/P0.7: a
     // blocked plan must not look executable in narratives). Said once, plainly, instead of letting
@@ -2981,7 +2983,11 @@
     });
     var hotDays = DAYS.filter(function(d,i){ return i!==restDay && dayAt(i).weather==="hot"; });
     var rainyDays = DAYS.filter(function(d,i){ return i!==restDay && dayAt(i).weather==="rainy"; });
-    var irrigationDays = restDay >= 0 ? 6 : 7;
+    // Audit P0.7: "Count actual days with scheduled events. Do not hard-code six irrigation days."
+    // Confirmed defect: with budget 0, every card correctly showed 0 L/tree, yet this still said
+    // "Water 6 of 7 days" purely because a rest day was configured — regardless of whether any
+    // water was actually scheduled anywhere. Same count the summary stat panel already uses.
+    var irrigationDays = litersPerTree.filter(function(l){ return l > 0; }).length;
 
     var parts = [];
     parts.push(restDay >= 0 ?
@@ -2994,8 +3000,17 @@
       // "full week" when neither constraint is actually binding this week.
       var compensationMadeWhole = scale >= 0.999 && !cappedDays.length && compensation.carryoverPerTree < 0.5;
       var hasBefore = compensation.beforeIdx !== -1, hasAfter = compensation.afterIdx !== -1;
+      // Audit P0.7: "a blocked or partial plan must not look fully executable" — when there's a
+      // neighbor day in view but the final-result accounting above (P0.6) found no actual headroom
+      // left on it (zero budget, zero pump capacity, every hour already spoken for), the ordinary
+      // "is advanced onto X (about 0 L/tree)" phrasing still reads as though real water moved,
+      // just happened to round to nothing. Say plainly that nothing could be applied instead.
+      var noHeadroom = (hasBefore || hasAfter) &&
+        (!hasBefore || compensation.beforeAmount < 0.5) && (!hasAfter || compensation.afterAmount < 0.5);
       var redistSentence;
-      if(hasBefore && hasAfter){
+      if(noHeadroom){
+        redistSentence = t("narr_compNoHeadroom", { day: DAYS[restDay], amt: Math.ceil(compensation.perTree) });
+      } else if(hasBefore && hasAfter){
         redistSentence = t(compensation.storageAware ? "narr_compBoth_storage" : "narr_compBoth_flat", {
           day: DAYS[restDay], amt: Math.ceil(compensation.perTree),
           beforeDay: DAYS[compensation.beforeIdx], afterDay: DAYS[compensation.afterIdx],
@@ -3019,23 +3034,33 @@
         redistSentence = t("narr_compNeither", { day: DAYS[restDay], amt: Math.ceil(compensation.perTree) });
       }
       parts.push(redistSentence +
-        (hasBefore && hasAfter && compensationMadeWhole ? " " + t("narr_fullWeek") :
+        (noHeadroom ? "" :
+          hasBefore && hasAfter && compensationMadeWhole ? " " + t("narr_fullWeek") :
           hasBefore && hasAfter ? " " + t("narr_dependsOnLimits") : ""));
     } else if(restDay >= 0){
       parts.push(t("narr_restNotNeeded", { day: DAYS[restDay] }));
     }
 
-    if(hotDays.length && normalIdx !== -1){
+    // Comparing liters on a day nothing was actually delivered isn't a real comparison — "about 0
+    // L/tree, versus 0 L/tree" when the whole plan delivered nothing (e.g. zero budget) reads as
+    // though the model still found a meaningful difference between hot and normal days (audit P0.7:
+    // a blocked/zero plan must not look like an ordinary one in the narrative).
+    if(hotDays.length && normalIdx !== -1 && (litersPerTree[hotIdx] > 0 || litersPerTree[normalIdx] > 0)){
       parts.push(t("narr_hotVsNormal", { days: joinList(hotDays), hotL: Math.floor(litersPerTree[hotIdx]), normalL: Math.floor(litersPerTree[normalIdx]) }));
-    } else if(hotDays.length){
+    } else if(hotDays.length && litersPerTree[hotIdx] > 0){
       parts.push(t("narr_hotOnly", { days: joinList(hotDays), hotL: Math.floor(litersPerTree[hotIdx]) }));
     }
 
     if(rainyDays.length){
       var rainyKey = rainyDays.length > 1 ? "_pl" : "_sg";
-      if(litersPerTree[rainyIdx] <= 0){
+      // Check the day's OWN unconstrained need (ownNeed), not its final constrained delivery —
+      // litersPerTree[rainyIdx] can read 0 for a completely different reason (zero budget, a
+      // blocked zone) that has nothing to do with rain actually covering it. Audit P0.7:
+      // "distinguish no demand... constrained shortage, and invalid configuration" rather than
+      // crediting rain for a zero that a budget/hardware constraint actually caused.
+      if(ownNeed[rainyIdx] <= 0.01){
         parts.push(t("narr_rainySkip" + rainyKey, { days: joinList(rainyDays) }));
-      } else {
+      } else if(litersPerTree[rainyIdx] > 0){
         parts.push(t("narr_rainyCut" + rainyKey, { days: joinList(rainyDays), rainyL: Math.floor(litersPerTree[rainyIdx]) }));
       }
     }
@@ -3443,7 +3468,7 @@
       return pickIrrigationWindow(hourlyArr, hoursNeeded[i], i === dayBeforeRest);
     });
 
-    $("narrative").textContent = buildNarrative(litersPerTree, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity);
+    $("narrative").textContent = buildNarrative(litersPerTree, ownNeed, restDay, cappedDays, scale, weeklyFinal, pctUsed, budget, windows, compensation, hardwareStatus, zoneDemandFlow, pumpCapacity);
     renderSoilBalance(soilCtx, litersPerTree, effAreaPerTree, efficiency);
     renderDemandChart(ownNeed, litersPerTree, restDay, compensation);
     renderFormulasPanel({
@@ -3488,7 +3513,12 @@
       var whenHtml = blockedHere ? '<span class="pc-when" style="color:var(--warn);font-weight:600;">' + t("sched_blocked") + '</span>' :
         (!isRest && litersPerTree[i] > 0) ?
         '<span class="pc-when">' + formatWindow(windows[i], hoursNeeded[i]) + '</span>' : "";
-      var compBadge = compensation && (i === compensation.beforeIdx || i === compensation.afterIdx) ?
+      // Only show the top-up badge when a non-trivial amount actually landed here — otherwise a
+      // zero-budget/blocked day that happens to sit next to the rest day shows "+Sat top-up" even
+      // though nothing was actually redistributed onto it (audit P0.7).
+      var compBadge = compensation && i === compensation.beforeIdx && compensation.beforeAmount > 0.5 ?
+        '<div class="pc-comp">+' + DAYS_SHORT[restDay] + " " + t("topUp") + "</div>" :
+        compensation && i === compensation.afterIdx && compensation.afterAmount > 0.5 ?
         '<div class="pc-comp">+' + DAYS_SHORT[restDay] + " " + t("topUp") + "</div>" : "";
       div.innerHTML =
         '<div class="pc-day">' + DAYS_SHORT[i] + dateSub + '</div>' +
@@ -3576,8 +3606,8 @@
               (compensation.carryoverPerTree > 0.5 ? " " + t("sched_compCarryover", { day: DAYS[restDay] }) : "") + "</em>" :
            compensation && isRest && compensation.afterIdx !== -1 ?
             " <em>" + t("sched_compAfterOnly", { afterDay: DAYS[compensation.afterIdx] }) + "</em>" : "") +
-          (compensation && i === compensation.beforeIdx ? " <em>" + t("sched_topUpAdvance", { day: DAYS[restDay] }) + "</em>" : "") +
-          (compensation && i === compensation.afterIdx ? " <em>" + t("sched_topUpMakeup", { day: DAYS[restDay] }) + "</em>" : "") +
+          (compensation && i === compensation.beforeIdx && compensation.beforeAmount > 0.5 ? " <em>" + t("sched_topUpAdvance", { day: DAYS[restDay] }) + "</em>" : "") +
+          (compensation && i === compensation.afterIdx && compensation.afterAmount > 0.5 ? " <em>" + t("sched_topUpMakeup", { day: DAYS[restDay] }) + "</em>" : "") +
           "</td>";
       body.appendChild(tr);
     });
