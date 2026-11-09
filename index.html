@@ -960,7 +960,10 @@
       soilBal_startMoisture: "Start-of-week soil moisture",
       soilBal_startUnknown: "Unknown — assume right at the refill threshold (depletion = RAW)",
       soilBal_startFull: "Assume full (just irrigated/rained to field capacity)",
-      soilBal_invalid: "Field capacity ({fc}%) must be greater than wilting point ({wp}%), and root depth must be positive — fix the inputs above to enable the balance.",
+      soilBal_invalid_range: "Field capacity ({fc}%) and wilting point ({wp}%) must each be between 0% and 100% (volumetric water content can't be outside that range) — fix the inputs above to enable the balance.",
+      soilBal_invalid_fcWp: "Field capacity ({fc}%) must be greater than wilting point ({wp}%) — fix the inputs above to enable the balance.",
+      soilBal_invalid_depth: "Root depth must be a positive number of meters — fix the inputs above to enable the balance.",
+      soilBal_invalid_depletion: "Allowed depletion must be greater than 0% and no more than 100% of TAW — fix the inputs above to enable the balance.",
       soilBal_tawRawNote: "TAW (total available water): {taw} mm · RAW (readily available before stress risk): {raw} mm, for a {depth} m root zone.",
       soilBal_notSimulated: "Not simulated — no live ET&#8320; for this day yet.",
       soilBal_riskYes: "Yes — past RAW",
@@ -1249,7 +1252,10 @@
       soilBal_startMoisture: "לחות קרקע בתחילת השבוע",
       soilBal_startUnknown: "לא ידוע — נניח בדיוק בסף המילוי מחדש (דלדול = RAW)",
       soilBal_startFull: "נניח מלא (הושקה/ירד גשם זה עתה עד קיבולת שדה)",
-      soilBal_invalid: "קיבולת השדה ({fc}%) חייבת להיות גדולה מנקודת הקמילה ({wp}%), ועומק השורשים חייב להיות חיובי — תקנו את הנתונים למעלה כדי להפעיל את המאזן.",
+      soilBal_invalid_range: "קיבולת השדה ({fc}%) ונקודת הקמילה ({wp}%) חייבות להיות בין 0% ל-100% (תכולת מים נפחית לא יכולה לחרוג מהטווח הזה) — תקנו את הנתונים למעלה כדי להפעיל את המאזן.",
+      soilBal_invalid_fcWp: "קיבולת השדה ({fc}%) חייבת להיות גדולה מנקודת הקמילה ({wp}%) — תקנו את הנתונים למעלה כדי להפעיל את המאזן.",
+      soilBal_invalid_depth: "עומק השורשים חייב להיות מספר חיובי של מטרים — תקנו את הנתונים למעלה כדי להפעיל את המאזן.",
+      soilBal_invalid_depletion: "הדלדול המותר חייב להיות גדול מ-0% ולא יותר מ-100% מה-TAW — תקנו את הנתונים למעלה כדי להפעיל את המאזן.",
       soilBal_tawRawNote: "TAW (סך המים הזמינים): {taw} מ\"מ · RAW (הזמינים בקלות לפני סיכון מתח): {raw} מ\"מ, לאזור שורשים בעומק {depth} מ'.",
       soilBal_notSimulated: "לא מדומה — אין עדיין ET&#8320; חי ליום הזה.",
       soilBal_riskYes: "כן — מעבר ל-RAW",
@@ -2279,9 +2285,22 @@
     return (netMm * effAreaPerTree) / efficiency;
   }
 
+  // Validates every soil input this model depends on (audit P0.2.7), not just FC>WP: field
+  // capacity and wilting point are volumetric fractions, so a value outside 0-100% is physically
+  // meaningless; a depletion fraction outside (0, 100] would make RAW negative or exceed TAW,
+  // neither of which can be a real "fraction of total available water."
   function computeTAWRAW(fcPct, wpPct, rootDepthM, depletionFractionPct){
-    if(!isFinite(fcPct) || !isFinite(wpPct) || !(fcPct > wpPct) || !(rootDepthM > 0)){
-      return { valid: false, taw: 0, raw: 0 };
+    if(!isFinite(fcPct) || !isFinite(wpPct) || fcPct <= 0 || fcPct > 100 || wpPct < 0 || wpPct >= 100){
+      return { valid: false, taw: 0, raw: 0, reason: "range" };
+    }
+    if(!(fcPct > wpPct)){
+      return { valid: false, taw: 0, raw: 0, reason: "fcWp" };
+    }
+    if(!isFinite(rootDepthM) || !(rootDepthM > 0)){
+      return { valid: false, taw: 0, raw: 0, reason: "depth" };
+    }
+    if(!isFinite(depletionFractionPct) || depletionFractionPct <= 0 || depletionFractionPct > 100){
+      return { valid: false, taw: 0, raw: 0, reason: "depletion" };
     }
     // Subtract the percentages BEFORE dividing by 100, not after: fcPct/100 - wpPct/100 (e.g.
     // 0.32 - 0.17) hits ordinary binary floating-point error and lands a hair under the true
@@ -2364,7 +2383,7 @@
     var startDepletion = $("startMoisture").value === "full" ? 0 : tawRaw.raw;
     return {
       enabled: $("soilBalanceEnabled").checked, tawRaw: tawRaw, known: known, etMm: etMm, rainMm: rainMm,
-      startDepletion: startDepletion, fcPct: fcPct, wpPct: wpPct, rootDepthM: rootDepthM
+      startDepletion: startDepletion, fcPct: fcPct, wpPct: wpPct, rootDepthM: rootDepthM, depletionPct: depletionPct
     };
   }
 
@@ -2377,7 +2396,10 @@
     var tawRaw = soilCtx.tawRaw;
     var note = $("tawRawNote"), panel = $("soilBalancePanel");
     if(!tawRaw.valid){
-      note.textContent = t("soilBal_invalid", { fc: soilCtx.fcPct, wp: soilCtx.wpPct });
+      var invalidKey = tawRaw.reason === "range" ? "soilBal_invalid_range" :
+        tawRaw.reason === "depth" ? "soilBal_invalid_depth" :
+        tawRaw.reason === "depletion" ? "soilBal_invalid_depletion" : "soilBal_invalid_fcWp";
+      note.textContent = t(invalidKey, { fc: soilCtx.fcPct, wp: soilCtx.wpPct });
       panel.innerHTML = "";
       return;
     }
